@@ -1169,6 +1169,19 @@ version to the newest *stable* patch, so "3.16" would fail exactly like the
 3.9 incident ("Version '3.16' … was not found"). Revisit when 3.16.0 final
 ships (ETA Oct 2027).
 
+### 2026-11-09 — CPython floor raised to >=3.10 (K6 resolved)
+
+User decision: supported versions are "greater than 3.9" — 3.7/3.8/3.9
+no longer supported. `pyproject.toml` `requires-python` changed
+`>=3.7` → `>=3.10`. Deliberately encoded as `>=3.10` rather than `>3.9`:
+under PEP 440 version normalization, bare `>3.9` still matches 3.9.x
+patch releases (3.9.5 compares greater than 3.9.0), which would defeat
+the purpose. Caveat noted for awareness: 3.10 itself went EOL Oct 2026
+and is not in the CI matrix (3.11–3.15), so the declared floor sits one
+minor below the tested range — acceptable for a driver whose CPython
+transport targets modern SBC distros; revisit if a consumer actually
+appears on 3.10. CHANGELOG gained an [Unreleased] entry; TODO K6 ticked.
+
 ## 11. Open Items (non-blocking)
 
 - Confirm `writeto_mem` presence at first Phase-A write (expected fine).

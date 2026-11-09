@@ -57,11 +57,12 @@ and tech debt.
 - [ ] **K5 — ESP32 deployed `_core.py` predates D33.** Superseded by R2;
       tracked here so the stale copy isn't forgotten if the board sits
       disconnected for a while.
-- [ ] **K6 — Align `requires-python` with CI coverage.** `pyproject.toml`
-      claims `>=3.7`; CI now tests 3.11–3.13 (3.9 dropped 2026-11-09: EOL,
-      no Ubuntu 26.04 runner build). Decide whether to tighten
-      `requires-python` to `>=3.11` or keep the broad claim (MicroPython
-      parity makes the CPython floor mostly theoretical).
+- [x] **K6 — Align `requires-python` with CI coverage.** RESOLVED
+      2026-11-09: user set the supported floor to "greater than 3.9" →
+      `requires-python = ">=3.10"` (encoded as `>=3.10`, not `>3.9`, because
+      PEP 440 lets `>3.9` still match 3.9.x patches). 3.10 is EOL (Oct
+      2026) and below the CI matrix (3.11–3.15); declared support
+      intentionally one minor wider than tested.
 
 ## Fixed this session (2026-11-09)
 

@@ -7,7 +7,7 @@ name = "max31760"
 version = "0.1.0"
 description = "Dual-platform (MicroPython + CPython/Linux) driver for the Maxim MAX31760 precision fan-speed controller"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 license = { text = "LGPL-2.1-or-later" }
 authors = [{ name = "Marc Christensen" }]
 keywords = ["max31760", "fan-control", "i2c", "micropython", "raspberrypi", "sbc"]

@@ -5,6 +5,17 @@ All notable changes to the `max31760` driver are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- CPython support floor raised from `>=3.7` to `>=3.10` (drops Python
+  3.7–3.9, all EOL). Encoded as `>=3.10` rather than `>3.9`: under PEP 440
+  version normalization, bare `>3.9` would still admit 3.9.x patch
+  releases. Note that 3.10 itself is EOL (Oct 2026) and sits just below
+  the CI test matrix (3.11–3.15); declared support is intentionally one
+  minor wider than the tested range.
+
 ## [0.1.0] - 2026-11-08
 
 Initial release (frozen). Dual-platform Python driver for the Maxim MAX31760
