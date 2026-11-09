@@ -1,0 +1,2 @@
+# CPython / Linux SBC runtime dependency (MicroPython target needs nothing).
+smbus2>=0.4.2

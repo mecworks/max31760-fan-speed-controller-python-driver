@@ -1,0 +1,31 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging / build artifacts
+*.egg-info/
+build/
+dist/
+wheels/
+
+# Environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Vendor documentation (copyrighted — local reference copies only,
+# never redistribute; canonical URLs in README.md "References")
+reference/MAX31760.pdf
+
+# OS cruft
+.DS_Store
+Thumbs.db

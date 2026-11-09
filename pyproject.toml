@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "max31760"
+version = "0.1.0"
+description = "Dual-platform (MicroPython + CPython/Linux) driver for the Maxim MAX31760 precision fan-speed controller"
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "LGPL-2.1-or-later" }
+authors = [{ name = "Marc Christensen" }]
+keywords = ["max31760", "fan-control", "i2c", "micropython", "raspberrypi", "sbc"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Hardware :: Hardware Interfaces",
+]
+# smbus2 is only meaningful on Linux; MicroPython users install nothing.
+dependencies = [
+    "smbus2>=0.4.2; platform_system == 'Linux'",
+]
+
+[tool.setuptools]
+packages = ["max31760"]
