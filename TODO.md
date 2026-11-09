@@ -12,12 +12,11 @@ and tech debt.
 
 ## Roadmap
 
-- [ ] **R1 — Push to GitHub** as `max31760-fan-speed-controller-python-driver`.
-      Repo prep complete (`.gitignore`, `LICENSE` (LGPL-2.1-or-later),
-      `CHANGELOG.md`, CI workflow, `CONTRIBUTING.md`). Pending: owner
-      sign-off on the pre-commit review, then `git init` → initial commit →
-      push. Datasheet PDF stays local only (vendor copyright; canonical URLs
-      documented in README References).
+- [x] **R1 — Push to GitHub** as `max31760-fan-speed-controller-python-driver`.
+      **DONE 2026-11-09:** root commit `c31228c` (81 files) pushed to
+      <https://github.com/mecworks/max31760-fan-speed-controller-python-driver>
+      (public). Datasheet PDF stayed local only (vendor copyright; canonical
+      URLs documented in README References).
 - [ ] **R2 — ESP32 re-validation with the D33 core** *(blocked: board
       disconnected).* Redeploy `_core.py` to `:/lib/max31760/_core.py`,
       re-run `hw_smoke_test.py` + `e2e_hardware_test.py`, confirm 12/12.

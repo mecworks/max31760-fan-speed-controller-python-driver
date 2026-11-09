@@ -1123,6 +1123,25 @@ https://www.analog.com/media/en/technical-documentation/data-sheets/max31760.pdf
 Also fixed the stale `reference/` row in the README layout table (it still
 listed the upstream clone removed earlier today).
 
+### 2026-11-09 — GitHub publication: repo created, v0.1.0 pushed
+
+Repo prep completed and published: `git init -b main` → single root commit
+(81 files, 10,048 insertions) → pushed to
+https://github.com/mecworks/max31760-fan-speed-controller-python-driver
+(public). Pre-push changes this session: license finalized as
+**LGPL-2.1-or-later** (`LICENSE` rewritten with the canonical GNU text,
+© Marc Christensen; `pyproject.toml` license/classifier/authors,
+`CONTRIBUTING.md`, and README banner updated from the MIT placeholder);
+home-LAN identifiers redacted (RPi SSH user/IP removed from PLANS.md,
+SUMMARY.md, scripts/README.md; Windows username path generalized in
+PLANS.md); stale generated artifacts purged (`max31760.egg-info/`,
+`__pycache__/`); `docs/README.md` fixes (duplicated §7 item number, stale
+127→134 test count). New files added: `TODO.md` (roadmap + known issues),
+`CHANGELOG.md`, `CONTRIBUTING.md`, `.github/workflows/ci.yml` (all four
+quality gates × Python 3.9/3.11/3.13 on every push/PR). Datasheet PDF
+excluded via `.gitignore` (vendor copyright); canonical primary/backup URLs
+in README References.
+
 ## 11. Open Items (non-blocking)
 
 - Confirm `writeto_mem` presence at first Phase-A write (expected fine).
