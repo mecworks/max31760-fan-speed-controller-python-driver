@@ -57,6 +57,11 @@ and tech debt.
 - [ ] **K5 — ESP32 deployed `_core.py` predates D33.** Superseded by R2;
       tracked here so the stale copy isn't forgotten if the board sits
       disconnected for a while.
+- [ ] **K6 — Align `requires-python` with CI coverage.** `pyproject.toml`
+      claims `>=3.7`; CI now tests 3.11–3.13 (3.9 dropped 2026-11-09: EOL,
+      no Ubuntu 26.04 runner build). Decide whether to tighten
+      `requires-python` to `>=3.11` or keep the broad claim (MicroPython
+      parity makes the CPython floor mostly theoretical).
 
 ## Fixed this session (2026-11-09)
 

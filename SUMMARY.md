@@ -1142,6 +1142,21 @@ quality gates × Python 3.9/3.11/3.13 on every push/PR). Datasheet PDF
 excluded via `.gitignore` (vendor copyright); canonical primary/backup URLs
 in README References.
 
+### 2026-11-09 — CI fix: replaced EOL Python 3.9 in the test matrix
+
+First GitHub Actions run (on the root commit) failed on the py3.9 leg:
+`actions/setup-python` reported *"The version '3.9' with architecture 'x64'
+was not found for Ubuntu 26.04"* — the `ubuntu-latest` image migrated to
+Ubuntu 26 on 2026-10-19, and 3.9 (EOL Oct 2025) has no 26.04 build in the
+actions/python-versions manifest. The py3.11 and py3.13 legs passed all four
+gates cleanly. Fix: matrix switched to **3.11 / 3.12 / 3.13** (each has a
+26.04 build; 3.10 was skipped deliberately — it has a 26.04 build but went
+EOL Oct 2026 and would break the same way shortly). Cosmetic residual
+annotations noted for awareness: Node.js 20 deprecation warnings on
+`checkout@v4`/`setup-python@v5` (forced onto Node 24) and the
+ubuntu-latest→Ubuntu 26 migration notice. Tracked as K6: decide whether to
+tighten `requires-python` (`>=3.7`) toward the tested range.
+
 ## 11. Open Items (non-blocking)
 
 - Confirm `writeto_mem` presence at first Phase-A write (expected fine).
