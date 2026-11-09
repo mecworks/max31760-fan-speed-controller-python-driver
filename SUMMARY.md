@@ -1157,6 +1157,18 @@ annotations noted for awareness: Node.js 20 deprecation warnings on
 ubuntu-latest→Ubuntu 26 migration notice. Tracked as K6: decide whether to
 tighten `requires-python` (`>=3.7`) toward the tested range.
 
+### 2026-11-09 — CI matrix extended to Python 3.14 and 3.15
+
+On user request ("latest python is 3.15"), added **3.14** and **3.15** to
+the test matrix (now 3.11–3.15, five legs). Verified against the live
+actions/python-versions manifest (fetched 2026-11-09): both minors have
+stable linux x64 builds for Ubuntu 26.04 (3.14.6+ through 3.14.10; all of
+3.15.0–3.15.2). **3.16 deliberately NOT added**: the manifest lists only
+`3.16.0-alpha.1`, flagged non-stable; `setup-python` resolves a bare minor
+version to the newest *stable* patch, so "3.16" would fail exactly like the
+3.9 incident ("Version '3.16' … was not found"). Revisit when 3.16.0 final
+ships (ETA Oct 2027).
+
 ## 11. Open Items (non-blocking)
 
 - Confirm `writeto_mem` presence at first Phase-A write (expected fine).
