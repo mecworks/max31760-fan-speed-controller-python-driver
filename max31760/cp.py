@@ -87,6 +87,13 @@ class MAX31760(_Core):
     """MAX31760 driver bound to a Linux SMBus/I2C bus."""
 
     def __init__(self, bus: int = 1, addr: int = 0x50, handle=None):
+        """Bind to a Linux SMBus/I2C bus (smbus2).
+
+        bus is the bus number (e.g. 1 for /dev/i2c-1); addr is the 7-bit
+        I2C address, valid range 0x50..0x57. Pass an existing smbus2.SMBus
+        object as handle to adopt it instead of opening one (then close()
+        will not release it). Raises ValueError if addr is out of range.
+        """
         super().__init__(TransportCP(bus, addr, handle), addr)
 
     def close(self):

@@ -4,6 +4,7 @@ Mixed into MAX31760 (see _core.py). Methods here touch SR (0x5A), MASK
 (0x04), FFDC (0x03) and the fault-related bit fields of CR2/CR3. Kept in a
 separate module so the protocol core stays focused on transport, math and
 the primary control path (size-budget policy, PLANS.md decision 6).
+F#/D# markers refer to the feature-item and decision tables in PLANS.md.
 """
 from ._regs import (
     REG_SR, REG_MASK, REG_FFDC, REG_CR2, REG_CR3,
@@ -21,24 +22,29 @@ class FaultMixin:
     # -- status (F16) ----------------------------------------------------------
 
     def status_raw(self) -> int:
-        """Read the raw status register (SR, 0x5A).
+        """DESTRUCTIVE READ: reading SR clears the latched alarm bits.
 
-        WARNING: reading SR CLEARS the latched alarm bits (datasheet); a
-        persisting fault re-latches at the next detection. Test the result
-        against the SR_* flag constants.
+        Returns the raw status register (SR, 0x5A) as read; a persisting
+        fault re-latches at the next detection. Test the result against the
+        SR_* flag constants. Call this OR active_alarms() per service cycle,
+        not both - the second read would see an already-cleared register.
         """
         return self._burst_read(REG_SR, 1)[0]
 
     def remote_diode_fault(self) -> bool:
-        """True if the remote-diode-fault alarm (RDFA) is latched."""
+        """True if the remote-diode-fault alarm (RDFA) is latched.
+
+        Consumes the latch like status_raw(): the underlying SR read clears
+        the other alarm bits too, so call ONE or the other per service cycle.
+        """
         return bool(self.status_raw() & SR_RDFA)
 
     def active_alarms(self) -> int:
-        """Read SR and return a compact bitmask of the six alarm bits
-        (PC excluded, i.e. SR & SR_ALARM_MASK).
+        """DESTRUCTIVE READ: consumes the SR latch exactly like status_raw().
 
-        Consumes the latch exactly like status_raw(): call ONE or the other
-        per service cycle, not both — the second read would see an already
+        Reads SR and returns a compact bitmask of the six alarm bits
+        (PC excluded, i.e. SR & SR_ALARM_MASK). Call ONE or the other per
+        service cycle, not both - the second read would see an already
         cleared register.
         """
         return self.status_raw() & SR_ALARM_MASK
@@ -60,13 +66,19 @@ class FaultMixin:
 
     @ff_dc_raw.setter
     def ff_dc_raw(self, raw: int):
+        """Set the fan-fail forced duty raw (0..255);
+        raises ValueError outside that range.
+        """
         d = int(raw)
         if d < 0 or d > 255:
             raise ValueError(f"FFDC {d:d} out of range 0..255")
         self._burst_write(REG_FFDC, (d,))
 
     def set_ffdc_pct(self, pct: float):
-        """Set the fan-fail forced duty cycle (FFDC), percent 0..100."""
+        """Set the fan-fail forced duty cycle (FFDC), percent 0..100.
+
+        Raises ValueError if pct is outside 0..100.
+        """
         self._burst_write(REG_FFDC, (pct_to_duty(pct),))
 
     @property
@@ -94,6 +106,9 @@ class FaultMixin:
 
     @ff_mode.setter
     def ff_mode(self, mode: int):
+        """Select the fan-fail output behaviour; raises ValueError on an
+        unknown value.
+        """
         m = int(mode)
         if m not in (FF_MODE_INTERRUPT, FF_MODE_COMPARATOR):
             raise ValueError(f"unknown FF mode {m:d}")
@@ -137,6 +152,9 @@ class FaultMixin:
 
     @alert_mask.setter
     def alert_mask(self, alarms: int):
+        """Set the masked alarm outputs; raises ValueError if the bitmask
+        exceeds the six alarm bits.
+        """
         m = int(alarms)
         if m < 0 or m > MASK_ALARM_FIELD:
             raise ValueError(f"alert mask 0x{m:02X} out of range")

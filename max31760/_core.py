@@ -1,9 +1,10 @@
 """Shared protocol core for the Maxim MAX31760 precision fan-speed controller.
 
 Platform-neutral: runs unmodified on MicroPython (RP2040/RP2350, ESP32) and
-CPython. No third-party imports, no type hints, no CPython-only syntax.
+CPython. No third-party imports, no CPython-only syntax; type annotations are
+restricted to bare built-in names (see tests/lint_subset.py).
 
-The core owns ALL protocol knowledge: register map, page-safe writes,
+The core owns all protocol knowledge: register map, page-safe writes,
 fixed-point math, error model. Transports are duck-typed objects providing:
     burst_read(reg, n) -> bytes      pointer read of n bytes starting at reg
     burst_write(reg, data) -> None   raw write of 1..8 bytes starting at reg
@@ -14,7 +15,12 @@ Optional: close()
 
 Error model (F23): ValueError for bad arguments/bounds; OSError for bus/NACK
 failures (after escalating-backoff retries); TimeoutError for EEPROM-busy
-overruns. Never silent failures.
+overruns. Failures are never silent.
+
+Section markers: F# refers to a feature item and D# to a decision, both
+defined in PLANS.md (feature table and decisions & rationale sections).
+Bench evidence for the retry/wait/POR policies lives in
+NOTES/06-eeprom-timing.md.
 """
 
 from ._regs import (
@@ -57,7 +63,7 @@ from ._faults import FaultMixin
 class MAX31760(FaultMixin):
     """MAX31760 device API bound to a transport (see module docstring).
 
-    Register-backed state is exposed as PROPERTIES; reading or assigning a
+    Register-backed state is exposed as properties; reading or assigning a
     property performs an I2C transaction (deliberate - the same convention
     serial.Serial.in_waiting uses for hardware drivers). Verbs are reserved
     for actions (save_config(), configure_4wire_fan(), ...) and for
@@ -103,6 +109,11 @@ class MAX31760(FaultMixin):
     EEX_ALL_BLOCKS = EEX_ALL_BLOCKS
 
     def __init__(self, transport, addr: int = 0x50):
+        """Bind the device API to a transport object (contract above).
+
+        addr is the 7-bit I2C address; valid range 0x50..0x57.
+        Raises ValueError if addr is outside that range.
+        """
         a = int(addr)
         if a < ADDR_MIN or a > ADDR_MAX:
             raise ValueError(
@@ -136,15 +147,12 @@ class MAX31760(FaultMixin):
     def _tx(self, fn):
         """Run a transport transaction, retrying through transient NACKs.
 
-        Live silicon (RPi 3A+, 2026-11-08) shows the MAX31760 genuinely
-        NACKs its own address (reads stay live) while an EEPROM load
-        commits new register values - a stall whose duration is variable
-        (observed 6 ms to >200 ms; bounded by tW max 550 ms) and which can
-        begin immediately AFTER a successful write, so no pre-wait alone
-        can prevent hitting it. The escalating backoff ladder spans the
-        full datasheet worst case and absorbs such finite transients
-        transparently on every API call; a persistent fault still raises
-        OSError after the final attempt.
+        The chip can NACK its own address for a variable window while an
+        EEPROM commit lands (bench record: NOTES/06-eeprom-timing.md), so
+        every public transaction rides this ladder: it spans the datasheet
+        worst case (tW max 550 ms) and absorbs such finite transients
+        transparently; a persistent fault still raises OSError after the
+        final attempt.
         """
         last = None
         for i in range(len(RETRY_DELAYS_MS) + 1):
@@ -169,7 +177,7 @@ class MAX31760(FaultMixin):
     def _page_safe_write(self, reg, data):
         """Split data into chunks that never cross an 8-byte page row.
 
-        The chip wraps the pointer WITHIN the page when a write crosses a
+        The chip wraps the pointer within the page when a write crosses a
         boundary without STOP, so every chunk must start aligned to its page
         row and span at most PAGE_SIZE bytes.
         """
@@ -213,11 +221,19 @@ class MAX31760(FaultMixin):
     # -- public raw access (F22) --------------------------------------------
 
     def read_reg(self, reg: int, n: int = 1) -> bytes:
-        """Raw burst read of n bytes starting at reg (0x00..0x5A). -> bytes"""
+        """Raw burst read of n bytes starting at reg (0x00..0x5A). -> bytes
+
+        Raises ValueError on out-of-range arguments; OSError after the
+        retry ladder exhausts.
+        """
         return self._burst_read(reg, n)
 
     def write_reg(self, reg: int, buf: bytes):
-        """Raw page-safe write of buf (1..N bytes) starting at reg (0x00..0x5B)."""
+        """Raw page-safe write of buf (1..N bytes) starting at reg (0x00..0x5B).
+
+        Raises ValueError on out-of-range arguments or overlap of the
+        read-only status register 0x5A; OSError after retries exhaust.
+        """
         self._burst_write(reg, buf)
 
     def probe(self) -> bool:
@@ -261,7 +277,10 @@ class MAX31760(FaultMixin):
 
     @local_high_c.setter
     def local_high_c(self, celsius: float):
-        """Set the local high set point (LHS), degrees C (-128..+127.875)."""
+        """Set the local high set point (LHS), degrees C (-128..+127.875).
+
+        Raises ValueError if celsius is outside that range.
+        """
         self._setpoint_set(REG_LHSH, celsius)
 
     @property
@@ -271,7 +290,10 @@ class MAX31760(FaultMixin):
 
     @remote_high_c.setter
     def remote_high_c(self, celsius: float):
-        """Set the remote high set point (RHS), degrees C (-128..+127.875)."""
+        """Set the remote high set point (RHS), degrees C (-128..+127.875).
+
+        Raises ValueError if celsius is outside that range.
+        """
         self._setpoint_set(REG_RHSH, celsius)
 
     @property
@@ -281,7 +303,10 @@ class MAX31760(FaultMixin):
 
     @local_overtemp_c.setter
     def local_overtemp_c(self, celsius: float):
-        """Set the local overtemperature set point (LOTS), degrees C."""
+        """Set the local overtemperature set point (LOTS), degrees C.
+
+        Raises ValueError if celsius is outside -128..+127.875.
+        """
         self._setpoint_set(REG_LOTSH, celsius)
 
     @property
@@ -291,7 +316,10 @@ class MAX31760(FaultMixin):
 
     @remote_overtemp_c.setter
     def remote_overtemp_c(self, celsius: float):
-        """Set the remote overtemperature set point (ROTS), degrees C."""
+        """Set the remote overtemperature set point (ROTS), degrees C.
+
+        Raises ValueError if celsius is outside -128..+127.875.
+        """
         self._setpoint_set(REG_ROTSH, celsius)
 
     # -- setpoint plumbing (internal) ----------------------------------------
@@ -315,7 +343,11 @@ class MAX31760(FaultMixin):
 
     @lut.setter
     def lut(self, duties):
-        """Write all 48 LUT entries from an iterable of 48 ints (0..255)."""
+        """Write all 48 LUT entries from an iterable of 48 ints (0..255).
+
+        Raises ValueError if any entry is outside 0..255 or the sequence
+        does not contain exactly 48 entries.
+        """
         vals = bytearray()
         for d in duties:
             v = int(d)
@@ -328,11 +360,17 @@ class MAX31760(FaultMixin):
         self._burst_write(REG_LUT_BASE, vals)
 
     def lut_get_index(self, index: int) -> int:
-        """Read one LUT entry (index 0..47). -> duty raw."""
+        """Read one LUT entry (index 0..47). -> duty raw.
+
+        Raises ValueError if index is outside 0..47.
+        """
         return self._burst_read(REG_LUT_BASE + self._lut_idx(index), 1)[0]
 
     def lut_set_index(self, index: int, duty: int):
-        """Write one LUT entry (index 0..47) with a duty raw (0..255)."""
+        """Write one LUT entry (index 0..47) with a duty raw (0..255).
+
+        Raises ValueError if index is outside 0..47 or duty outside 0..255.
+        """
         v = int(duty)
         if v < 0 or v > 255:
             raise ValueError(f"duty {v:d} out of range 0..255")
@@ -378,7 +416,10 @@ class MAX31760(FaultMixin):
         self._cr2_rmw(CR2_DFC, CR2_DFC if on else 0)
 
     def set_duty_pct(self, pct: float):
-        """Set the commanded fan duty, percent 0..100 (written to PWMR)."""
+        """Set the commanded fan duty, percent 0..100 (written to PWMR).
+
+        Raises ValueError if pct is outside 0..100.
+        """
         self._burst_write(REG_PWMR, (pct_to_duty(pct),))
 
     @property
@@ -388,6 +429,8 @@ class MAX31760(FaultMixin):
 
     @duty_cmd_raw.setter
     def duty_cmd_raw(self, raw: int):
+        """Assign a commanded duty raw (0..255); raises ValueError outside.
+        """
         d = int(raw)
         if d < 0 or d > 255:
             raise ValueError(f"duty {d:d} out of range 0..255")
@@ -412,6 +455,8 @@ class MAX31760(FaultMixin):
 
     @index_source.setter
     def index_source(self, source: int):
+        """Select the LUT index source; raises ValueError on unknown value.
+        """
         if source not in (INDEX_LOCAL, INDEX_REMOTE, INDEX_MAX):
             raise ValueError(f"unknown index source 0x{int(source):02X}")
         self._cr1_rmw(CR1_MTI | CR1_TIS, source)
@@ -423,6 +468,8 @@ class MAX31760(FaultMixin):
 
     @hysteresis_c.setter
     def hysteresis_c(self, celsius: int):
+        """Set the LUT hysteresis (2 or 4 only); raises ValueError otherwise.
+        """
         c = int(celsius)
         if c not in (2, 4):
             raise ValueError("hysteresis must be 2 or 4 C")
@@ -465,6 +512,7 @@ class MAX31760(FaultMixin):
 
     @pwm_polarity.setter
     def pwm_polarity(self, polarity: int):
+        """Set the PWM polarity; raises ValueError on an unknown value."""
         p = int(polarity)
         if p not in (_POLARITY_POSITIVE, _POLARITY_NEGATIVE):
             raise ValueError("polarity must be POLARITY_POSITIVE or POLARITY_NEGATIVE")
@@ -479,6 +527,9 @@ class MAX31760(FaultMixin):
 
     @ramp_rate.setter
     def ramp_rate(self, rate: int):
+        """Set the duty ramp rate (one of the RAMP_* constants);
+        raises ValueError on an unknown value.
+        """
         if rate not in (RAMP_SLOW, RAMP_MED_SLOW, RAMP_MED_FAST, RAMP_IMMEDIATE):
             raise ValueError(f"unknown ramp rate 0x{int(rate):02X}")
         v = self._burst_read(REG_CR3, 1)[0]
@@ -488,8 +539,11 @@ class MAX31760(FaultMixin):
                       timeout_ms: int = 2000) -> bool:
         """Wait until the actual output duty (PWMV) reaches target_pct.
 
-        Returns True when reached; raises TimeoutError after timeout_ms.
         Polls every 10 ms; the target is quantized to the 0..255 duty grid.
+        Returns True when reached.
+
+        Raises TimeoutError after timeout_ms elapses without reaching the
+        target; ValueError if timeout_ms is negative.
         """
         target = pct_to_duty(target_pct)
         deadline = int(timeout_ms)
@@ -531,7 +585,9 @@ class MAX31760(FaultMixin):
         pulses_per_rev is the fan's tach output frequency per revolution
         (commonly 2). Returns 0.0 when the counter reads zero (fan stopped
         or no pulses). A very slow fan whose count overflows surfaces as the
-        corresponding TACHxA alarm bit (see status()), not a bogus number.
+        corresponding TACHxA alarm bit (see status_raw()), not a bogus number.
+
+        Raises ValueError if port is not 1 or 2, or pulses_per_rev < 1.
         """
         p = int(port)
         if p not in (1, 2):
@@ -556,6 +612,9 @@ class MAX31760(FaultMixin):
 
     @tach_threshold.setter
     def tach_threshold(self, count: int):
+        """Set the minimum-RPM fail threshold; raises ValueError outside
+        0..65535.
+        """
         c = int(count)
         if c < 0 or c > 0xFFFF:
             raise ValueError(f"threshold {c:d} out of range 0..65535")
@@ -614,11 +673,15 @@ class MAX31760(FaultMixin):
 
         Sets PSEN, waits up to timeout_ms for the TC register to update
         (a stretched pulse lasts up to ~2.6 s worst case), clears PSEN and
-        returns the new count. Raises TimeoutError if the count never
-        changes within timeout_ms (e.g. the fan is stopped); PSEN is still
-        cleared in that case. The fan will visibly speed up during the
-        stretched pulse. Requires 33 Hz PWM with TACHFULL disabled (the
-        silicon ignores PSEN otherwise); ValueError raised if violated.
+        returns the new count. The fan will visibly speed up during the
+        stretched pulse.
+
+        Preconditions (checked, not assumed): 33 Hz PWM and TACHFULL
+        disabled - the silicon ignores PSEN otherwise.
+
+        Raises TimeoutError if the count never changes within timeout_ms
+        (e.g. the fan is stopped); PSEN is still cleared in that case.
+        Raises ValueError if port is invalid or a precondition is violated.
         """
         p = int(port)
         if p not in (1, 2):
@@ -660,6 +723,9 @@ class MAX31760(FaultMixin):
 
     @alert_mode.setter
     def alert_mode(self, mode: int):
+        """Select the ALERT output behaviour; raises ValueError on an
+        unknown value.
+        """
         m = int(mode)
         if m not in (ALERT_MODE_INTERRUPT, ALERT_MODE_FAULT_INDICATOR):
             raise ValueError(f"unknown alert mode {m:d}")
@@ -695,6 +761,9 @@ class MAX31760(FaultMixin):
 
     @ideality_factor_index.setter
     def ideality_factor_index(self, idx: int):
+        """Set the ideality-factor table index (0..63);
+        raises ValueError outside the table range.
+        """
         i = int(idx)
         if i < 0 or i >= len(IDEALITY_TABLE):
             raise ValueError(
@@ -710,9 +779,10 @@ class MAX31760(FaultMixin):
 
     def set_ideality_factor(self, n: float) -> int:
         """Program the ideality factor closest to n (nearest-match table
-        lookup) and return the index used. Raises ValueError if n lies
-        outside the table range (0.9844 .. 1.0489); ties resolve to the
-        lower index."""
+        lookup) and return the index used. Ties resolve to the lower index.
+
+        Raises ValueError if n lies outside the table range (0.9844 .. 1.0489).
+        """
         f = float(n)
         lo, hi = IDEALITY_TABLE[0], IDEALITY_TABLE[-1]
         if f < lo or f > hi:
@@ -736,9 +806,11 @@ class MAX31760(FaultMixin):
 
         blocks is a bitmask of EEX_BLOCK_* constants (default: all). Per the
         datasheet the EEPROM write begins at the STOP of the EEX transaction;
-        this method waits out the busy window (see _wait_eeprom_ready) and
-        raises TimeoutError on overrun. Power must remain stable for the
-        duration of the write.
+        this method waits out the busy window (see _wait_eeprom_ready).
+        Power must remain stable for the duration of the write.
+
+        Raises ValueError on an invalid block select; TimeoutError if
+        timeout_ms is below the 700 ms busy-window guarantee.
         """
         b = int(blocks)
         if b == 0 or b > EEX_ALL_BLOCKS:
@@ -751,7 +823,8 @@ class MAX31760(FaultMixin):
             *, timeout_ms: int = 2000):
         """Load EEPROM into RAM for the selected blocks (EEX, L/W=1).
 
-        Same block-select semantics and busy-window wait as save_config().
+        Same block-select semantics and busy-window wait as save_config();
+        same exceptions (ValueError / TimeoutError).
         """
         b = int(blocks)
         if b == 0 or b > EEX_ALL_BLOCKS:
@@ -765,16 +838,13 @@ class MAX31760(FaultMixin):
         Datasheet: tW is typically 110 ms per 16-byte block, MAX 550 ms for
         the full 80-byte range, and the recommended alternative to
         ack-polling is simply to wait out the maximum tW before accessing
-        the device. Live silicon (RPi 3A+, 2026-11-08) shows ack-polling is
-        unreliable in BOTH directions - the device ACKs stray probes before
-        it latches the EEX command, and while a LOAD commits new register
-        values it genuinely NACKs its own address (reads stay live) for a
-        variable time observed up to ~600 ms - so this waits a fixed 700 ms
-        (above the datasheet worst case) with ZERO bus traffic: probes and
-        oracle writes demonstrably interact badly with the silicon. The _tx
+        the device. The bench confirmed polling unsafe in both directions
+        (record: NOTES/06-eeprom-timing.md), so this waits a fixed 700 ms
+        (above the datasheet worst case) with zero bus traffic; the _tx
         retry ladder remains as a safety net beyond the guarantee.
+
         Raises TimeoutError if timeout_ms < 700 (readiness cannot be
-        guaranteed within the given budget).
+        guaranteed within the given budget); ValueError if negative.
         """
         limit = int(timeout_ms)
         if limit < 0:
@@ -799,6 +869,9 @@ class MAX31760(FaultMixin):
         Re-writes ALL blocks from the current RAM (which must hold the
         desired values), issues a soft POR so the chip reloads from EEPROM,
         and verifies PC cleared. Returns True on success, False otherwise.
+
+        Propagates the exceptions of save_config() and soft_por()
+        (ValueError / TimeoutError / OSError).
         """
         self.save_config(EEX_ALL_BLOCKS, timeout_ms=timeout_ms)
         self.soft_por()
@@ -810,24 +883,23 @@ class MAX31760(FaultMixin):
         """Issue a software power-on reset (CR1.SW_POR, self-clearing).
 
         The device resets and reloads RAM from EEPROM; latched alarms and
-        volatile state are lost.
+        volatile state are lost. Because the chip resets mid-transaction,
+        the SW_POR write is issued exactly once, outside the normal retry
+        ladder (a retry would re-fire the POR into a still-booting chip),
+        and any OSError from that single write is expected and swallowed;
+        see NOTES/06-eeprom-timing.md for the bench record.
 
-        IMPORTANT (live silicon, RPi 3A+, 2026-11-08): the POR executes as
-        soon as the SW_POR bit is latched, and the chip resets so fast that
-        the in-flight I2C transaction commonly reports an error (errno 121
-        on Linux bcm2835) even though the reset HAPPENED. Retrying the
-        write would re-trigger another POR, so the write is issued exactly
-        once, outside the normal retry ladder, and any OSError from it is
-        expected and swallowed. Afterward the method polls until the device
-        acknowledges again (up to settle_ms; the default of 1000 ms covers
-        pathological boot times), verifies responsiveness, then waits out
-        the EEPROM-reload busy window (the POR performs an implicit load -
-        see _wait_eeprom_ready). Raises OSError only if the device never
-        comes back within settle_ms.
+        Afterward the method polls until the device acknowledges again (up
+        to settle_ms; the default of 1000 ms covers pathological boot
+        times), verifies responsiveness, then waits out the EEPROM-reload
+        busy window (the POR performs an implicit load - see
+        _wait_eeprom_ready).
+
+        Raises OSError only if the device never comes back within settle_ms.
         """
         cur = self._burst_read(REG_CR1, 1)[0]
         try:
-            # Raw transport call, deliberately bypassing _tx: NO retries
+            # Raw transport call, deliberately bypassing _tx: no retries
             # here (a retry re-fires the POR into a still-booting chip).
             self._t.burst_write(REG_CR1, ((cur | CR1_SW_POR) & 0xFF,))
         except OSError:
@@ -851,14 +923,20 @@ class MAX31760(FaultMixin):
         self._cr2_rmw(CR2_STBY, CR2_STBY if on else 0)
 
     def user_memory_get(self, index: int = 0) -> int:
-        """Read one byte of general-purpose user memory (10h..17h), 0..7."""
+        """Read one byte of general-purpose user memory (10h..17h), 0..7.
+
+        Raises ValueError if index is outside 0..7.
+        """
         i = int(index)
         if i < 0 or i > 7:
             raise ValueError(f"user memory index {i:d} out of range 0..7")
         return self._burst_read(REG_USER_BASE + i, 1)[0]
 
     def user_memory_set(self, index: int, value: int):
-        """Write one byte of general-purpose user memory (10h..17h), 0..7."""
+        """Write one byte of general-purpose user memory (10h..17h), 0..7.
+
+        Raises ValueError if index is outside 0..7 or value outside 0..255.
+        """
         i = int(index)
         v = int(value)
         if i < 0 or i > 7:
@@ -872,7 +950,10 @@ class MAX31760(FaultMixin):
         return self._burst_read(REG_USER_BASE, 8)
 
     def user_memory_write_all(self, data: bytes):
-        """Write all 8 bytes of user memory (len(data) must be 8)."""
+        """Write all 8 bytes of user memory (len(data) must be 8).
+
+        Raises ValueError if len(data) != 8.
+        """
         d = bytes(bytearray(data))
         if len(d) != 8:
             raise ValueError(f"expected 8 bytes, got {len(d):d}")
@@ -904,6 +985,8 @@ class MAX31760(FaultMixin):
         Does not change the control mode: assign dev.manual = True if you
         intend to drive the output with set_duty_pct(); otherwise the LUT
         governs (factory default).
+
+        Raises ValueError for an invalid port or unsupported pwm_freq_hz.
         """
         self.pwm_freq_hz = pwm_freq_hz
         self._single_port_hygiene(port)
@@ -917,6 +1000,8 @@ class MAX31760(FaultMixin):
         Applies single-fan hygiene for the selected port. As with the other
         presets, this does not change the control mode: enable manual mode
         (dev.manual = True) to drive the duty with set_duty_pct().
+
+        Raises ValueError for an invalid port.
         """
         self.pwm_freq_hz = PWM_FREQ_33HZ
         self.pulse_stretch_enabled = True
@@ -928,6 +1013,8 @@ class MAX31760(FaultMixin):
         Enables both tachometers and clears any latched fan-fail. Note the
         single PWM output drives both fans simultaneously, and fan-fail
         force (FFDC) applies to the shared output.
+
+        Raises ValueError for an unsupported pwm_freq_hz.
         """
         self.pwm_freq_hz = pwm_freq_hz
         self.tach1_enabled = True

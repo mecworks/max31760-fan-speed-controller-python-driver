@@ -88,6 +88,12 @@ class MAX31760(_Core):
     """MAX31760 driver bound to a MicroPython machine.I2C instance."""
 
     def __init__(self, i2c, addr: int = 0x50):
+        """Bind to a caller-built machine.I2C instance (already configured
+        with the bus number and frequency).
+
+        addr is the 7-bit I2C address; valid range 0x50..0x57.
+        Raises ValueError if addr is outside that range.
+        """
         super().__init__(TransportMP(i2c, addr), addr)
 
     def close(self):
