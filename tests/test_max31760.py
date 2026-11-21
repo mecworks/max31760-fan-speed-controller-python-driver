@@ -46,6 +46,7 @@ from max31760._core import (
 )
 from max31760._transport_cp import TransportCP
 from max31760._lut import lut_index_for_temp, build_lut_curve
+import max31760._regs as regs_mod
 
 
 class TestConstants(unittest.TestCase):
@@ -1391,6 +1392,51 @@ class TestApiParity(unittest.TestCase):
                                  "signature mismatch: %s" % name)
             else:
                 self.assertEqual(m, c, "constant mismatch: %s" % name)
+
+
+class TestRegsModule(unittest.TestCase):
+    """M1 (D-03): _regs.py is the single source of truth for register
+    constants, bit fields, encodings and fixed-point helpers."""
+
+    def test_regs_is_leaf_module(self):
+        import ast
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "..", "max31760", "_regs.py")
+        src = open(path, encoding="utf-8").read()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                self.fail("import found in leaf module _regs: %r" % node)
+
+    def test_core_reexports_every_reg_name(self):
+        import max31760._core as core
+        for name in dir(regs_mod):
+            if name.startswith("__"):
+                continue
+            self.assertTrue(hasattr(core, name),
+                            "%s not re-exported by _core" % name)
+            self.assertEqual(getattr(regs_mod, name), getattr(core, name),
+                             "value drift for %s" % name)
+
+    def test_dead_names_removed(self):
+        import max31760._core as core
+        dead = ("CR2_FS_ENABLE",
+                "EEX_BLK_00_0F", "EEX_BLK_10_1F", "EEX_BLK_20_2F",
+                "EEX_BLK_30_3F", "EEX_BLK_40_4F",
+                "MASK_TACH1A", "MASK_TACH2A", "MASK_ROTA",
+                "MASK_RHA", "MASK_LOTA", "MASK_LHA")
+        for name in dead:
+            self.assertFalse(hasattr(regs_mod, name),
+                             "%s should be gone from _regs" % name)
+            self.assertFalse(hasattr(core, name),
+                             "%s still bound in _core" % name)
+
+    def test_survivors_pinned(self):
+        self.assertEqual(regs_mod.CR2_FSENABLE, 0x08)
+        self.assertEqual(regs_mod.EEX_SAVE_ALL, 0x1F)
+        self.assertEqual(regs_mod.EEX_LOAD_ALL, 0x9F)
+        self.assertEqual(regs_mod.MASK_RESERVED_HI, 0xC0)
+        self.assertEqual(regs_mod.POR_SETTLE_MS, 2000)
 
 
 if __name__ == "__main__":

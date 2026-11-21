@@ -6,7 +6,7 @@ Checks (per PLANS.md verification item 2):
   - no type annotations / arrow returns
   - no f-strings, async/await, yield-from, walrus operator
   (@property IS allowed: MicroPython supports the property builtin.)
-Shared files: _core.py, _transport_mp.py, mp.py, __init__.py
+Shared files: _regs.py, _core.py, _transport_mp.py, mp.py, __init__.py
 Exempt (CPython-only by design): _transport_cp.py, cp.py
 """
 import ast
@@ -14,6 +14,7 @@ import py_compile
 import sys
 
 SHARED = [
+    "max31760/_regs.py",
     "max31760/_core.py",
     "max31760/_tables.py",
     "max31760/_lut.py",

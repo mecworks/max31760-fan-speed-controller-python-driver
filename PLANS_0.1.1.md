@@ -40,7 +40,7 @@ result from v0.1.0.
 - [x] (2026-11-21 11:41Z) Plan authored: every claim in CODE_REVIEW_FOR_0.1.1.md verified against the code base (verdicts in Surprises & Discoveries); baseline gates captured (134 tests OK, 124 public members PASS, lint PASS, compileall clean).
 - [x] (2026-11-21) User review complete: D-04 (primary property/verb variant) and D-10 APPROVED; branch name fixed to `v0.1.1-refactor` (no `chatbox/` prefix); D-15 adopted (no backwards compatibility, no deprecation warnings — pre-1.0 release); hardware strategy set: Pico W performs ALL initial on-hardware testing, ESP32-S3 and RPi 3A+ legs deferred until Pico work + testing is complete.
 - [x] (2026-11-21) Go-ahead received; execution started (M0). Execution directives: no co-author trailers; merge after all platforms validated; RPi 3A+ at `marc@192.168.1.225` (SSH keys); single MAX31760 chip relocated between benches (sequential validation).
-- [ ] M0: create branch `v0.1.1-refactor` from `main`; re-confirm green baseline on the branch.
+- [x] (2026-11-21) M0 COMPLETE: branch `v0.1.1-refactor` created from `main` @ 09f2db5; plan doc committed (ef8e4c9, incl. `.gitignore` pattern fix); all four host gates re-confirmed green ON THE BRANCH (transcript in Artifacts and Notes); RPi 3A+ key-auth probe OK (hostname `fanspeedcontroller`, Python 3.13.5, `~/max31760-test/` pre-populated with the v0.1.0 deployment).
 - [ ] M1: deduplicate register constants; extract leaf module `max31760/_regs.py`; remove mid-file circular import.
 - [ ] M2: quick structural wins — context manager, `__repr__`, zero-arg `super()`, drop `(object)` bases, `_SmbusCompat` payload-length assert, named `POR_SETTLE_MS` constant.
 - [ ] M3: behavior fixes — `measure_tach_once` raises `TimeoutError` on unchanged count; `get_pwm_freq_hz` raises on unknown DRV combo; keyword-only fences on timeout parameters.
@@ -613,6 +613,32 @@ Baseline transcripts (captured 2026-11-21, v0.1.0, repo root):
     max31760/mp.py : CLEAN
     max31760/__init__.py : CLEAN
     RESULT: PASS
+
+M0 transcript (captured 2026-11-21 on branch `v0.1.1-refactor`, commit ef8e4c9):
+
+    $ git checkout -b v0.1.1-refactor
+    Switched to a new branch 'v0.1.1-refactor'
+    $ python -m unittest discover tests
+    Ran 134 tests in 2.137s
+    OK
+    $ python tools/api_coverage.py
+    public members: 124
+    RESULT: PASS (all public members referenced by the suite)
+    $ python tests/lint_subset.py
+    max31760/_core.py : CLEAN
+    max31760/_tables.py : CLEAN
+    max31760/_lut.py : CLEAN
+    max31760/_faults.py : CLEAN
+    max31760/_transport_mp.py : CLEAN
+    max31760/mp.py : CLEAN
+    max31760/__init__.py : CLEAN
+    RESULT: PASS
+    $ python -m compileall -q max31760
+    (no output, exit 0)
+    $ ssh marc@192.168.1.225 "hostname && python3 --version"
+    fanspeedcontroller
+    Python 3.13.5
+    # ~/max31760-test/ already holds the v0.1.0 deployment (package + both E2E suites + rpi_* scripts)
 
 (Milestone transcripts — gate outputs, red→green demonstrations, Pico W probe and E2E
 matrix results, merge/tag records — are appended here as each milestone lands.)

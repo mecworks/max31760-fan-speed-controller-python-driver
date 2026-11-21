@@ -3,10 +3,10 @@
 Window layout (datasheet Table 7): window 0 covers temperatures below
 18 C; each further window spans 2 C; window 47 saturates >= 110 C.
 Kept separate from _core.py to hold the protocol core under the size
-budget; depends only on _core fixed-point helpers.
+budget; depends only on _regs fixed-point helpers.
 """
 
-from ._core import LUT_LEN, pct_to_duty
+from ._regs import LUT_LEN, pct_to_duty
 
 # Window geometry (Table 7).
 LUT_FIRST_BOUND_C = 18.0

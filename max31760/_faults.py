@@ -5,7 +5,7 @@ Mixed into MAX31760 (see _core.py). Methods here touch SR (0x5A), MASK
 separate module so the protocol core stays focused on transport, math and
 the primary control path (size-budget policy, PLANS.md decision 6).
 """
-from ._core import (
+from ._regs import (
     REG_SR, REG_MASK, REG_FFDC, REG_CR2, REG_CR3,
     SR_RDFA, SR_ALARM_MASK, MASK_ALARM_FIELD,
     CR3_CLRFAIL, CR3_FF_0,
