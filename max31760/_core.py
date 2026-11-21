@@ -401,12 +401,17 @@ class MAX31760(FaultMixin):
                          % h)
 
     def get_pwm_freq_hz(self):
-        """Current PWM frequency in Hz (33, 150, 1500 or 25000)."""
+        """Current PWM frequency in Hz (33, 150, 1500 or 25000).
+
+        Raises ValueError if the CR1 DRV bits hold an unrecognized combo
+        (fail loud rather than guessing; unreachable today - the field is
+        exactly 2 bits and all four encodings exist).
+        """
         v = self._burst_read(REG_CR1, 1)[0] & CR1_DRV_MASK
         for f, b in _PWM_FREQ_TO_BITS:
             if v == b:
                 return f
-        return PWM_FREQ_33HZ
+        raise ValueError("unknown PWM DRV bits 0x%02X" % v)
 
     def set_pwm_polarity(self, polarity):
         """Set PWM polarity: POLARITY_POSITIVE (default) or POLARITY_NEGATIVE."""
@@ -435,7 +440,7 @@ class MAX31760(FaultMixin):
         """Current ramp rate (one of the RAMP_* constants)."""
         return self._burst_read(REG_CR3, 1)[0] & CR3_RAMP_MASK
 
-    def wait_for_duty(self, target_pct, timeout_ms=2000):
+    def wait_for_duty(self, target_pct, *, timeout_ms=2000):
         """Wait until the actual output duty (PWMV) reaches target_pct.
 
         Returns True when reached; raises TimeoutError after timeout_ms.
@@ -553,12 +558,14 @@ class MAX31760(FaultMixin):
         """True if TACHFULL mode is enabled (CR3.TACHFULL)."""
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_TACHFULL)
 
-    def measure_tach_once(self, port=1, timeout_ms=3000):
+    def measure_tach_once(self, port=1, *, timeout_ms=3000):
         """One-shot TACH counter update via pulse stretching (PSEN).
 
         Sets PSEN, waits up to timeout_ms for the TC register to update
         (a stretched pulse lasts up to ~2.6 s worst case), clears PSEN and
-        returns the new count. The fan will visibly speed up during the
+        returns the new count. Raises TimeoutError if the count never
+        changes within timeout_ms (e.g. the fan is stopped); PSEN is still
+        cleared in that case. The fan will visibly speed up during the
         stretched pulse. Requires 33 Hz PWM with TACHFULL disabled (the
         silicon ignores PSEN otherwise); ValueError raised if violated.
         """
@@ -583,6 +590,9 @@ class MAX31760(FaultMixin):
                 cnt = (raw[0] << 8) | raw[1]
                 if cnt != base:
                     break
+            if cnt == base:
+                raise TimeoutError(
+                    "TACH count did not update within %d ms" % int(timeout_ms))
             return cnt
         finally:
             self.pulse_stretch_enable(False)
@@ -666,7 +676,7 @@ class MAX31760(FaultMixin):
 
     # -- EEPROM lifecycle (F20) --------------------------------------------------
 
-    def save_config(self, blocks=EEX_ALL_BLOCKS, timeout_ms=2000):
+    def save_config(self, blocks=EEX_ALL_BLOCKS, *, timeout_ms=2000):
         """Write RAM to EEPROM for the selected blocks (EEX, L/W=0).
 
         blocks is a bitmask of EEX_BLOCK_* constants (default: all). Per the
@@ -681,7 +691,7 @@ class MAX31760(FaultMixin):
         self._burst_write(REG_EEX, ((b & EEX_ALL_BLOCKS),))
         self._wait_eeprom_ready(timeout_ms)
 
-    def load_config(self, blocks=EEX_ALL_BLOCKS, timeout_ms=2000):
+    def load_config(self, blocks=EEX_ALL_BLOCKS, *, timeout_ms=2000):
         """Load EEPROM into RAM for the selected blocks (EEX, L/W=1).
 
         Same block-select semantics and busy-window wait as save_config().
@@ -726,20 +736,20 @@ class MAX31760(FaultMixin):
         """
         return bool(self.status_raw() & SR_PC)
 
-    def recover_from_corruption(self, timeout_ms=2000):
+    def recover_from_corruption(self, *, timeout_ms=2000):
         """Recover from a program-corrupt condition (SR.PC set).
 
         Re-writes ALL blocks from the current RAM (which must hold the
         desired values), issues a soft POR so the chip reloads from EEPROM,
         and verifies PC cleared. Returns True on success, False otherwise.
         """
-        self.save_config(EEX_ALL_BLOCKS, timeout_ms)
+        self.save_config(EEX_ALL_BLOCKS, timeout_ms=timeout_ms)
         self.soft_por()
         return not self.eeprom_corrupt()
 
     # -- lifecycle: soft POR, standby, user memory (F21) ------------------------
 
-    def soft_por(self, settle_ms=1000):
+    def soft_por(self, *, settle_ms=1000):
         """Issue a software power-on reset (CR1.SW_POR, self-clearing).
 
         The device resets and reloads RAM from EEPROM; latched alarms and

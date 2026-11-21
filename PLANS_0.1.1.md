@@ -42,8 +42,8 @@ result from v0.1.0.
 - [x] (2026-11-21) Go-ahead received; execution started (M0). Execution directives: no co-author trailers; merge after all platforms validated; RPi 3A+ at `marc@192.168.1.225` (SSH keys); single MAX31760 chip relocated between benches (sequential validation).
 - [x] (2026-11-21) M0 COMPLETE: branch `v0.1.1-refactor` created from `main` @ 09f2db5; plan doc committed (ef8e4c9, incl. `.gitignore` pattern fix); all four host gates re-confirmed green ON THE BRANCH (transcript in Artifacts and Notes); RPi 3A+ key-auth probe OK (hostname `fanspeedcontroller`, Python 3.13.5, `~/max31760-test/` pre-populated with the v0.1.0 deployment).
 - [x] (2026-11-21) M1 COMPLETE (commit a186994): `max31760/_regs.py` created as leaf module (zero package imports); `_core.py` shrunk by ~270 lines (constants region + six helpers moved out; NOTE comment and mid-file `from ._faults import FaultMixin` deleted, import moved to top); `_faults.py`/`_lut.py` now import from `_regs`; lint gate covers 8 files; new `TestRegsModule` (4 tests). Gates green: **138 tests OK** (134 baseline UNMODIFIED + 4 new — proves zero value drift), api-coverage PASS (124 members), lint PASS ×8, compileall clean; import-order independence verified (`import max31760._faults` and `import max31760._lut` directly now succeed without importing `_core` first).
-- [ ] M2: quick structural wins — context manager, `__repr__`, zero-arg `super()`, drop `(object)` bases, `_SmbusCompat` payload-length assert, named `POR_SETTLE_MS` constant.
-- [ ] M3: behavior fixes — `measure_tach_once` raises `TimeoutError` on unchanged count; `get_pwm_freq_hz` raises on unknown DRV combo; keyword-only fences on timeout parameters.
+- [x] (2026-11-21) M2 COMPLETE (commit 5490987): `__enter__`/`__exit__` (never suppresses) + no-op core `close()` (facades override); `__repr__` → `<MAX31760 addr=0xNN>`; zero-arg `super()` in cp/mp; `(object)` dropped from all four classes; `_SmbusCompat.read_i2c_block_data` raises OSError on short legacy payloads; `soft_por` uses named `POR_SETTLE_MS`. New tests: `TestContextManager` (4), `TestRepr` (1), `TestSmbusCompatContract` (2); `POR_SETTLE_MS` pinned in `TestConstants`. Gates green: **145 tests OK**, api-coverage PASS (**125** public members — `close` added to core surface, covered), lint PASS ×8, compileall clean.
+- [x] (2026-11-21) M3 COMPLETE: `measure_tach_once` raises TimeoutError when the count never changes (PSEN still cleared via finally); `get_pwm_freq_hz` raises ValueError on unknown DRV combo instead of guessing 33 Hz; keyword-only fences (`*, timeout_ms=` / `*, settle_ms=`) on wait_for_duty, measure_tach_once, save_config, load_config, recover_from_corruption, soft_por; internal call site fixed (`recover_from_corruption → save_config(..., timeout_ms=timeout_ms)`). Red→green demonstrated (transcript in Artifacts and Notes). Gates green: **148 tests OK**, api-coverage PASS (125), lint PASS ×8, compileall clean.
 - [ ] M4: honest package facade — root `__all__`, extended mp/cp `__all__`, fix the lying export comment.
 - [ ] M5: accessor unification (properties for state, verbs for actions) per approved D-04; update tests, examples, scripts, docs.
 - [ ] M6: idiom sweep — f-string migration (with lint-gate update), `_u16_get`/`_u16_set` helpers, `zip`/`bisect` in `build_lut_curve`.
@@ -63,6 +63,7 @@ Evidence: duplicate CR2/SR/EEX constant blocks at `_core.py` lines ~87–94 vs ~
 - Observation: `tools/api_coverage.py` (CI gate) asserts every public member of the core class is referenced by name in `tests/test_max31760.py`. This is a free safety net for the M5 rename: any new or renamed public member that lacks test coverage fails CI. Baseline: 124 public members, PASS.
 - Observation: `TestApiParity.test_module_exports_match` asserts `mp.__all__ == cp.__all__` and object identity of the shared exports. Any facade-export change (M4) must extend BOTH lists identically or the parity gate breaks.
 - Observation: making `timeout_ms` keyword-only (M3) breaks existing positional call sites: `tests/test_max31760.py` calls `dev.wait_for_duty(50.0, 30)` and `dev.wait_for_duty(50.0, -1)` positionally; `examples/` already uses the `timeout_ms=` keyword form. Internal call sites `soft_por → self._wait_eeprom_ready(2000)` and `recover_from_corruption → self.save_config(EEX_ALL_BLOCKS, timeout_ms)` also pass optionals positionally.
+  - CORRECTION (M3, 2026-11-21): the positional test call sites live inside `assertRaises` argument lists (`self.assertRaises(TimeoutError, dev.wait_for_duty, 50.0, 30)`), which a naive regex for direct calls misses — three total in `TestRampRate` (incl. `101.0, 100`). All converted to keyword form; no other hidden positional callers exist repo-wide (verified by targeted grep).
 - Observation: platform claims verified against internet references: MicroPython added f-string support (PEP 498) in v1.17 (SourceForge v1.17 release notes: "adds support for f-strings (PEP-498), with a few limitations"); the project's stated baseline is v1.19.1 RP2040, so f-strings are safe. Zero-arg `super()`, `@property`, and simple built-in-name annotations are standard MicroPython features; container-generic annotations (`list[int]`) and `from __future__ import annotations` are NOT supported and remain banned.
 - Observation: `get_pwm_freq_hz`'s silent-33-Hz fallback is UNREACHABLE today: the DRV field is exactly 2 bits and all four encodings exist, so the masked value always matches. The fix (raise instead) is defensive — it converts a latent silent assumption into a loud failure if the field is ever widened or a constant typos. Characterized as such in D-06.
 
@@ -657,6 +658,38 @@ M1 transcript (captured 2026-11-21, commit a186994):
     facade-import-ok
     $ python -c "import max31760._faults" ; python -c "import max31760._lut"
     faults-direct-ok / lut-direct-ok   (previously required _core imported first)
+
+M2 transcript (captured 2026-11-21, commit 5490987):
+
+    $ python -m unittest discover tests
+    Ran 145 tests in 2.149s
+    OK
+    $ python tools/api_coverage.py
+    public members: 125
+    RESULT: PASS (all public members referenced by the suite)
+
+M3 red→green transcript (captured 2026-11-21):
+
+RED — new/flipped tests run against pre-M3 core (git show 5490987:_core.py),
+     exactly the four designed failures, everything else green:
+
+    FAIL: test_timeout_params_are_keyword_only (TestKeywordOnlyTimeouts)
+        AssertionError: POSITIONAL_OR_KEYWORD is not KEYWORD_ONLY
+    FAIL: test_unknown_drv_combo_raises (TestPwmFreqGuard)
+        (old getter silently returned 33 Hz for an unmatched DRV combo)
+    FAIL: test_measure_tach_once_port2_times_out_on_static_count (TestThreeWireAssist)
+        AssertionError: TimeoutError not raised by measure_tach_once
+    FAIL: test_measure_tach_once_times_out_on_static_count (TestThreeWireAssist)
+        AssertionError: TimeoutError not raised by measure_tach_once
+    Ran 148 tests ... FAILED (failures=4)
+
+GREEN — same suite against the M3 core:
+
+    Ran 148 tests in 2.146s
+    OK
+    $ python tools/api_coverage.py
+    public members: 125
+    RESULT: PASS (all public members referenced by the suite)
 
 (Milestone transcripts — gate outputs, red→green demonstrations, Pico W probe and E2E
 matrix results, merge/tag records — are appended here as each milestone lands.)

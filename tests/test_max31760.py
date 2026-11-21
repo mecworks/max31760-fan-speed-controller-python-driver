@@ -663,13 +663,16 @@ class TestRampRate(unittest.TestCase):
     def test_wait_for_duty_timeout(self):
         dev, chip, tr = make_dev()
         chip.regs[REG_PWMV] = 255                # mock never slews
-        self.assertRaises(TimeoutError, dev.wait_for_duty, 50.0, 30)
+        self.assertRaises(TimeoutError, dev.wait_for_duty, 50.0,
+                          timeout_ms=30)
         self.assertGreater(len(tr.delays), 0)    # actually polled
 
     def test_wait_for_duty_bad_args(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.wait_for_duty, 50.0, -1)
-        self.assertRaises(ValueError, dev.wait_for_duty, 101.0, 100)
+        self.assertRaises(ValueError, dev.wait_for_duty, 50.0,
+                          timeout_ms=-1)
+        self.assertRaises(ValueError, dev.wait_for_duty, 101.0,
+                          timeout_ms=100)
 
 
 class TestTachometer(unittest.TestCase):
@@ -869,19 +872,40 @@ class TestThreeWireAssist(unittest.TestCase):
         dev.tacho_full_enable(False)
         self.assertEqual(chip.regs[REG_CR3], 0x03)
 
-    def test_measure_tach_once_returns_count_and_clears_psen(self):
+    def test_measure_tach_once_times_out_on_static_count(self):
         dev, chip, _ = make_dev()
         chip.regs[REG_TC1H] = 0x05
         chip.regs[REG_TC1L] = 0x0D                       # static mock: no change
-        cnt = dev.measure_tach_once(port=1, timeout_ms=150)
-        self.assertEqual(cnt, 0x050D)
+        self.assertRaises(TimeoutError, dev.measure_tach_once,
+                          port=1, timeout_ms=150)
         self.assertFalse(dev.pulse_stretch_enabled())    # cleared in finally
 
-    def test_measure_tach_once_port2_reads_tc2(self):
+    def test_measure_tach_once_success_path(self):
+        dev, chip, tr = make_dev()
+        chip.regs[REG_TC1H] = 0x05
+        chip.regs[REG_TC1L] = 0x0D
+        orig = tr.burst_read
+        state = {"polls": 0}
+
+        def fake_burst_read(reg, n):
+            if reg == REG_TC1H:
+                state["polls"] += 1
+                if state["polls"] == 1:                  # base read
+                    return b"\x05\x0d"
+                return b"\x05\x0e"                       # updates on first poll
+            return orig(reg, n)
+
+        tr.burst_read = fake_burst_read
+        cnt = dev.measure_tach_once(port=1, timeout_ms=150)
+        self.assertEqual(cnt, 0x050E)
+        self.assertFalse(dev.pulse_stretch_enabled())
+
+    def test_measure_tach_once_port2_times_out_on_static_count(self):
         dev, chip, _ = make_dev()
         chip.regs[REG_TC2H] = 0xAB
         chip.regs[REG_TC2L] = 0xCD
-        self.assertEqual(dev.measure_tach_once(port=2, timeout_ms=150), 0xABCD)
+        self.assertRaises(TimeoutError, dev.measure_tach_once,
+                          port=2, timeout_ms=150)
 
     def test_measure_tach_once_preconditions(self):
         dev, _, _ = make_dev()
@@ -893,6 +917,41 @@ class TestThreeWireAssist(unittest.TestCase):
         dev.tacho_full_enable(True)
         self.assertRaises(ValueError, dev.measure_tach_once, port=1,
                           timeout_ms=50)
+
+
+class TestPwmFreqGuard(unittest.TestCase):
+    """M3 (D-06): unknown DRV combos raise instead of guessing 33 Hz."""
+
+    def test_unknown_drv_combo_raises(self):
+        import max31760._core as core_mod
+        dev, _, _ = make_dev()
+        saved = core_mod._PWM_FREQ_TO_BITS
+        try:
+            dev.set_pwm_freq_hz(PWM_FREQ_150HZ)   # writes DRV = 0x08 (full table)
+            core_mod._PWM_FREQ_TO_BITS = ((PWM_FREQ_33HZ, CR1_DRV_33HZ),)
+            self.assertRaises(ValueError, dev.get_pwm_freq_hz)
+        finally:
+            core_mod._PWM_FREQ_TO_BITS = saved
+
+
+class TestKeywordOnlyTimeouts(unittest.TestCase):
+    """M3 (D-14): timeout/settle parameters are keyword-only."""
+
+    def test_timeout_params_are_keyword_only(self):
+        import inspect
+        checks = (
+            ("wait_for_duty", "timeout_ms"),
+            ("measure_tach_once", "timeout_ms"),
+            ("save_config", "timeout_ms"),
+            ("load_config", "timeout_ms"),
+            ("recover_from_corruption", "timeout_ms"),
+            ("soft_por", "settle_ms"),
+        )
+        for meth, param in checks:
+            sig = inspect.signature(getattr(MAX31760, meth))
+            kind = sig.parameters[param].kind
+            self.assertIs(kind, inspect.Parameter.KEYWORD_ONLY,
+                          "%s.%s must be keyword-only" % (meth, param))
 
 
 class TestAlertAndIdeality(unittest.TestCase):
