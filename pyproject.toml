@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "max31760"
-version = "0.1.0"
+version = "0.1.1"
 description = "Dual-platform (MicroPython + CPython/Linux) driver for the Maxim MAX31760 precision fan-speed controller"
 readme = "README.md"
 requires-python = ">=3.10"
