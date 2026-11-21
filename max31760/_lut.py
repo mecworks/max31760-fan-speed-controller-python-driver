@@ -6,6 +6,8 @@ Kept separate from _core.py to hold the protocol core under the size
 budget; depends only on _regs fixed-point helpers.
 """
 
+import bisect
+
 from ._regs import LUT_LEN, pct_to_duty
 
 # Window geometry (Table 7).
@@ -37,10 +39,11 @@ def build_lut_curve(points):
         raise ValueError("need at least 2 breakpoints")
     for t, p in pts:
         if p < 0.0 or p > 100.0:
-            raise ValueError("percent %.3f out of range 0..100" % p)
-    for i in range(1, len(pts)):
-        if pts[i][0] <= pts[i - 1][0]:
+            raise ValueError(f"percent {p:.3f} out of range 0..100")
+    for (t_prev, _), (t_cur, _) in zip(pts, pts[1:]):
+        if t_cur <= t_prev:
             raise ValueError("breakpoints must increase in temperature")
+    temps = [t for t, _ in pts]
     out = []
     for i in range(LUT_LEN):
         t = 17.0 + LUT_WINDOW_STEP_C * i
@@ -49,9 +52,7 @@ def build_lut_curve(points):
         elif t >= pts[-1][0]:
             p = pts[-1][1]
         else:
-            j = 0
-            while pts[j + 1][0] < t:
-                j += 1
+            j = bisect.bisect_left(temps, t) - 1
             t0, p0 = pts[j]
             t1, p1 = pts[j + 1]
             p = p0 + (p1 - p0) * (t - t0) / (t1 - t0)

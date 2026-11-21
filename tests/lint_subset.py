@@ -4,8 +4,9 @@ Checks (per PLANS.md verification item 2):
   - compiles under CPython (syntax valid)
   - no CPython-only imports (os/sys/json/struct/logging/subprocess/threading/socket...)
   - no type annotations / arrow returns
-  - no f-strings, async/await, yield-from, walrus operator
-  (@property IS allowed: MicroPython supports the property builtin.)
+  - no async/await, yield-from, walrus operator
+  (f-strings ARE allowed since M6/D-12: MicroPython supports PEP 498 from v1.17;
+   the project baseline is v1.29.0. @property is likewise allowed.)
 Shared files: _regs.py, _core.py, _transport_mp.py, mp.py, __init__.py
 Exempt (CPython-only by design): _transport_cp.py, cp.py
 """
@@ -64,7 +65,7 @@ def check(path):
         elif isinstance(node, ast.AnnAssign):
             problems.append("annotation at line %d" % node.lineno)
         elif isinstance(node, ast.JoinedStr):
-            problems.append("f-string at line %d" % node.lineno)
+            pass  # f-strings allowed (D-12): MicroPython >= 1.17 supports PEP 498
         elif isinstance(node, ast.AsyncFunctionDef):
             problems.append("async def at line %d" % node.lineno)
         elif isinstance(node, ast.Yield):

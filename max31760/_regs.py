@@ -167,7 +167,7 @@ def temp_to_raw16(celsius):
     c = float(celsius)
     if c < -128.0 or c > 127.875:
         raise ValueError(
-            "temperature %.3f C out of range -128.0..+127.875" % c)
+            f"temperature {c:.3f} C out of range -128.0..+127.875")
     q = int(round(c * 8.0))
     return (q << 5) & 0xFFFF
 
@@ -184,7 +184,7 @@ def duty_to_pct(duty):
     """Duty raw (0..255) to percent float (0..99.609...)."""
     d = int(duty)
     if d < 0 or d > 255:
-        raise ValueError("duty %d out of range 0..255" % d)
+        raise ValueError(f"duty {d:d} out of range 0..255")
     return d * 100.0 / 256.0
 
 
@@ -192,7 +192,7 @@ def pct_to_duty(pct):
     """Percent (0..100) to duty raw (0..255), rounded."""
     p = float(pct)
     if p < 0.0 or p > 100.0:
-        raise ValueError("percent %.3f out of range 0..100" % p)
+        raise ValueError(f"percent {p:.3f} out of range 0..100")
     d = int(round(p * 256.0 / 100.0))
     if d > 255:
         d = 255

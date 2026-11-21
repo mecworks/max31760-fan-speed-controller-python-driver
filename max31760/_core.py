@@ -105,8 +105,8 @@ class MAX31760(FaultMixin):
     def __init__(self, transport, addr=0x50):
         a = int(addr)
         if a < ADDR_MIN or a > ADDR_MAX:
-            raise ValueError("address 0x%02X outside 0x%02X..0x%02X"
-                             % (a, ADDR_MIN, ADDR_MAX))
+            raise ValueError(
+                f"address 0x{a:02X} outside 0x{ADDR_MIN:02X}..0x{ADDR_MAX:02X}")
         self._t = transport
         self._addr = a
 
@@ -120,7 +120,7 @@ class MAX31760(FaultMixin):
         return False  # never suppress exceptions
 
     def __repr__(self):
-        return "<MAX31760 addr=0x%02X>" % self._addr
+        return f"<MAX31760 addr=0x{self._addr:02X}>"
 
     def close(self):
         """Release resources held by this device object.
@@ -162,8 +162,8 @@ class MAX31760(FaultMixin):
         if nn < 1:
             raise ValueError("read length must be >= 1")
         if r < 0 or r + nn - 1 > REG_SR:
-            raise ValueError("read 0x%02X+%d out of range 0x00..0x5A"
-                             % (r, nn - 1))
+            raise ValueError(
+                f"read 0x{r:02X}+{nn - 1:d} out of range 0x00..0x5A")
         return self._tx(lambda: self._t.burst_read(r, nn))
 
     def _page_safe_write(self, reg, data):
@@ -190,12 +190,25 @@ class MAX31760(FaultMixin):
             raise ValueError("empty write buffer")
         end = r + len(b) - 1
         if r < 0 or end > REG_EEX:
-            raise ValueError("write 0x%02X+%d out of range 0x00..0x5B"
-                             % (r, len(b) - 1))
+            raise ValueError(
+                f"write 0x{r:02X}+{len(b) - 1:d} out of range 0x00..0x5B")
         if r <= REG_SR <= end:
-            raise ValueError("write 0x%02X+%d overlaps read-only status "
-                             "register 0x5A" % (r, len(b) - 1))
+            raise ValueError(
+                f"write 0x{r:02X}+{len(b) - 1:d} overlaps read-only status "
+                f"register 0x5A")
         self._page_safe_write(r, b)
+
+    def _u16_get(self, hi_reg):
+        """Read a big-endian 16-bit pair starting at hi_reg. -> int."""
+        raw = self._burst_read(hi_reg, 2)
+        return (raw[0] << 8) | raw[1]
+
+    def _u16_set(self, hi_reg, value):
+        """Write value as a big-endian 16-bit pair starting at hi_reg."""
+        v = int(value)
+        if v < 0 or v > 0xFFFF:
+            raise ValueError(f"value {v:d} out of range 0..65535")
+        self._burst_write(hi_reg, ((v >> 8) & 0xFF, v & 0xFF))
 
     # -- public raw access (F22) --------------------------------------------
 
@@ -226,7 +239,7 @@ class MAX31760(FaultMixin):
         Raises OSError if the device does not answer. Returns True on success.
         """
         if not self.probe():
-            raise OSError("MAX31760 not responding at 0x%02X" % self._addr)
+            raise OSError(f"MAX31760 not responding at 0x{self._addr:02X}")
         return True
 
     # -- temperatures & setpoints (F2, F3) -----------------------------------
@@ -234,14 +247,12 @@ class MAX31760(FaultMixin):
     @property
     def local_temp_c(self):
         """Local (IC die) temperature in degrees C (float, 0.125 resolution)."""
-        raw = self._burst_read(REG_LTH, 2)
-        return raw16_to_temp((raw[0] << 8) | raw[1])
+        return raw16_to_temp(self._u16_get(REG_LTH))
 
     @property
     def remote_temp_c(self):
         """Remote diode-junction temperature in degrees C (float, 0.125 res.)."""
-        raw = self._burst_read(REG_RTH, 2)
-        return raw16_to_temp((raw[0] << 8) | raw[1])
+        return raw16_to_temp(self._u16_get(REG_RTH))
 
     @property
     def local_high_c(self):
@@ -286,12 +297,10 @@ class MAX31760(FaultMixin):
     # -- setpoint plumbing (internal) ----------------------------------------
 
     def _setpoint_get(self, hi_reg):
-        raw = self._burst_read(hi_reg, 2)
-        return raw16_to_temp((raw[0] << 8) | raw[1])
+        return raw16_to_temp(self._u16_get(hi_reg))
 
     def _setpoint_set(self, hi_reg, celsius):
-        v = temp_to_raw16(celsius)
-        self._burst_write(hi_reg, (v >> 8, v & 0xFF))
+        self._u16_set(hi_reg, temp_to_raw16(celsius))
 
     # -- LUT (F4, F5) ---------------------------------------------------------
 
@@ -311,10 +320,11 @@ class MAX31760(FaultMixin):
         for d in duties:
             v = int(d)
             if v < 0 or v > 255:
-                raise ValueError("duty %d out of range 0..255" % v)
+                raise ValueError(f"duty {v:d} out of range 0..255")
             vals.append(v)
         if len(vals) != LUT_LEN:
-            raise ValueError("LUT needs %d entries, got %d" % (LUT_LEN, len(vals)))
+            raise ValueError(
+                f"LUT needs {LUT_LEN:d} entries, got {len(vals):d}")
         self._burst_write(REG_LUT_BASE, vals)
 
     def lut_get_index(self, index):
@@ -325,14 +335,15 @@ class MAX31760(FaultMixin):
         """Write one LUT entry (index 0..47) with a duty raw (0..255)."""
         v = int(duty)
         if v < 0 or v > 255:
-            raise ValueError("duty %d out of range 0..255" % v)
+            raise ValueError(f"duty {v:d} out of range 0..255")
         self._burst_write(REG_LUT_BASE + self._lut_idx(index), (v,))
 
     @staticmethod
     def _lut_idx(index):
         i = int(index)
         if i < 0 or i >= LUT_LEN:
-            raise ValueError("LUT index %d out of range 0..%d" % (i, LUT_LEN - 1))
+            raise ValueError(
+                f"LUT index {i:d} out of range 0..{LUT_LEN - 1:d}")
         return i
 
     # -- manual/auto modes & PWM output config (F6-F8) ------------------------
@@ -379,7 +390,7 @@ class MAX31760(FaultMixin):
     def duty_cmd_raw(self, raw):
         d = int(raw)
         if d < 0 or d > 255:
-            raise ValueError("duty %d out of range 0..255" % d)
+            raise ValueError(f"duty {d:d} out of range 0..255")
         self._burst_write(REG_PWMR, (d,))
 
     @property
@@ -402,7 +413,7 @@ class MAX31760(FaultMixin):
     @index_source.setter
     def index_source(self, source):
         if source not in (INDEX_LOCAL, INDEX_REMOTE, INDEX_MAX):
-            raise ValueError("unknown index source 0x%02X" % int(source))
+            raise ValueError(f"unknown index source 0x{int(source):02X}")
         self._cr1_rmw(CR1_MTI | CR1_TIS, source)
 
     @property
@@ -432,7 +443,7 @@ class MAX31760(FaultMixin):
         for f, b in _PWM_FREQ_TO_BITS:
             if v == b:
                 return f
-        raise ValueError("unknown PWM DRV bits 0x%02X" % v)
+        raise ValueError(f"unknown PWM DRV bits 0x{v:02X}")
 
     @pwm_freq_hz.setter
     def pwm_freq_hz(self, hz):
@@ -441,8 +452,8 @@ class MAX31760(FaultMixin):
             if h == f:
                 self._cr1_rmw(CR1_DRV_MASK, b)
                 return
-        raise ValueError("PWM frequency %d Hz unsupported (use 33/150/1500/25000)"
-                         % h)
+        raise ValueError(
+            f"PWM frequency {h:d} Hz unsupported (use 33/150/1500/25000)")
 
     @property
     def pwm_polarity(self):
@@ -469,7 +480,7 @@ class MAX31760(FaultMixin):
     @ramp_rate.setter
     def ramp_rate(self, rate):
         if rate not in (RAMP_SLOW, RAMP_MED_SLOW, RAMP_MED_FAST, RAMP_IMMEDIATE):
-            raise ValueError("unknown ramp rate 0x%02X" % int(rate))
+            raise ValueError(f"unknown ramp rate 0x{int(rate):02X}")
         v = self._burst_read(REG_CR3, 1)[0]
         self._burst_write(REG_CR3, (((v & ~CR3_RAMP_MASK) | rate) & 0xFF,))
 
@@ -488,8 +499,8 @@ class MAX31760(FaultMixin):
                 return True
             if deadline <= 0:
                 raise TimeoutError(
-                    "duty did not reach %.1f%% within %d ms"
-                    % (float(target_pct), int(timeout_ms)))
+                    f"duty did not reach {float(target_pct):.1f}% within "
+                    f"{int(timeout_ms):d} ms")
             self._t.delay_ms(10)
             deadline -= 10
 
@@ -527,9 +538,8 @@ class MAX31760(FaultMixin):
         n = int(pulses_per_rev)
         if n < 1:
             raise ValueError("pulses_per_rev must be >= 1")
-        hi, lo = (REG_TC1H, REG_TC1L) if p == 1 else (REG_TC2H, REG_TC2L)
-        raw = self._burst_read(hi, 2)
-        count = (raw[0] << 8) | raw[1]
+        hi = REG_TC1H if p == 1 else REG_TC2H
+        count = self._u16_get(hi)
         if count == 0:
             return 0.0
         return (60.0 * TACH_REF_HZ) / (count * n)
@@ -541,15 +551,14 @@ class MAX31760(FaultMixin):
         The fan is considered failed when its measured count exceeds this
         value (or overflows). Factory default is 65534 (effectively off).
         """
-        raw = self._burst_read(REG_TCTH, 2)
-        return (raw[0] << 8) | raw[1]
+        return self._u16_get(REG_TCTH)
 
     @tach_threshold.setter
     def tach_threshold(self, count):
         c = int(count)
         if c < 0 or c > 0xFFFF:
-            raise ValueError("threshold %d out of range 0..65535" % c)
-        self._burst_write(REG_TCTH, ((c >> 8) & 0xFF, c & 0xFF))
+            raise ValueError(f"threshold {c:d} out of range 0..65535")
+        self._u16_set(REG_TCTH, c)
 
     # -- 3-wire assist & spin-up (F10, F15) ------------------------------------
 
@@ -617,8 +626,7 @@ class MAX31760(FaultMixin):
         if self.tacho_full_enabled:
             raise ValueError("pulse stretching requires TACHFULL disabled")
         reg = REG_TC1H if p == 1 else REG_TC2H
-        raw = self._burst_read(reg, 2)
-        base = (raw[0] << 8) | raw[1]
+        base = self._u16_get(reg)
         cnt = base
         self.pulse_stretch_enabled = True
         try:
@@ -626,13 +634,12 @@ class MAX31760(FaultMixin):
             while waited < int(timeout_ms):
                 self._t.delay_ms(50)
                 waited += 50
-                raw = self._burst_read(reg, 2)
-                cnt = (raw[0] << 8) | raw[1]
+                cnt = self._u16_get(reg)
                 if cnt != base:
                     break
             if cnt == base:
                 raise TimeoutError(
-                    "TACH count did not update within %d ms" % int(timeout_ms))
+                    f"TACH count did not update within {int(timeout_ms):d} ms")
             return cnt
         finally:
             self.pulse_stretch_enabled = False
@@ -653,7 +660,7 @@ class MAX31760(FaultMixin):
     def alert_mode(self, mode):
         m = int(mode)
         if m not in (ALERT_MODE_INTERRUPT, ALERT_MODE_FAULT_INDICATOR):
-            raise ValueError("unknown alert mode %d" % m)
+            raise ValueError(f"unknown alert mode {m:d}")
         self._cr2_rmw(CR2_ALERTS,
                       CR2_ALERTS if m == ALERT_MODE_FAULT_INDICATOR else 0)
 
@@ -688,8 +695,9 @@ class MAX31760(FaultMixin):
     def ideality_factor_index(self, idx):
         i = int(idx)
         if i < 0 or i >= len(IDEALITY_TABLE):
-            raise ValueError("ideality index %d out of range 0..%d"
-                             % (i, len(IDEALITY_TABLE) - 1))
+            raise ValueError(
+                f"ideality index {i:d} out of range "
+                f"0..{len(IDEALITY_TABLE) - 1:d}")
         v = self._burst_read(REG_IFR, 1)[0]
         self._burst_write(REG_IFR, (((v & ~IFR_INDEX_MASK) | i) & 0xFF,))
 
@@ -706,8 +714,9 @@ class MAX31760(FaultMixin):
         f = float(n)
         lo, hi = IDEALITY_TABLE[0], IDEALITY_TABLE[-1]
         if f < lo or f > hi:
-            raise ValueError("ideality factor %.4f outside table range "
-                             "%.4f..%.4f" % (f, lo, hi))
+            raise ValueError(
+                f"ideality factor {f:.4f} outside table range "
+                f"{lo:.4f}..{hi:.4f}")
         best_i, best_d = 0, abs(IDEALITY_TABLE[0] - f)
         for i in range(1, len(IDEALITY_TABLE)):
             d = abs(IDEALITY_TABLE[i] - f)
@@ -729,7 +738,7 @@ class MAX31760(FaultMixin):
         """
         b = int(blocks)
         if b == 0 or b > EEX_ALL_BLOCKS:
-            raise ValueError("block select 0x%02X invalid" % b)
+            raise ValueError(f"block select 0x{b:02X} invalid")
         self._burst_write(REG_EEX, ((b & EEX_ALL_BLOCKS),))
         self._wait_eeprom_ready(timeout_ms)
 
@@ -740,7 +749,7 @@ class MAX31760(FaultMixin):
         """
         b = int(blocks)
         if b == 0 or b > EEX_ALL_BLOCKS:
-            raise ValueError("block select 0x%02X invalid" % b)
+            raise ValueError(f"block select 0x{b:02X} invalid")
         self._burst_write(REG_EEX, (EEX_LOAD_BIT | (b & EEX_ALL_BLOCKS),))
         self._wait_eeprom_ready(timeout_ms)
 
@@ -766,7 +775,7 @@ class MAX31760(FaultMixin):
             raise ValueError("timeout_ms must be >= 0")
         if limit < EEPROM_WAIT_MS:
             raise TimeoutError(
-                "EEPROM busy after %d ms (need >= %d)" % (limit, EEPROM_WAIT_MS))
+                f"EEPROM busy after {limit:d} ms (need >= {EEPROM_WAIT_MS:d})")
         self._t.delay_ms(EEPROM_WAIT_MS)
 
     def eeprom_corrupt(self):
@@ -839,7 +848,7 @@ class MAX31760(FaultMixin):
         """Read one byte of general-purpose user memory (10h..17h), 0..7."""
         i = int(index)
         if i < 0 or i > 7:
-            raise ValueError("user memory index %d out of range 0..7" % i)
+            raise ValueError(f"user memory index {i:d} out of range 0..7")
         return self._burst_read(REG_USER_BASE + i, 1)[0]
 
     def user_memory_set(self, index, value):
@@ -847,9 +856,9 @@ class MAX31760(FaultMixin):
         i = int(index)
         v = int(value)
         if i < 0 or i > 7:
-            raise ValueError("user memory index %d out of range 0..7" % i)
+            raise ValueError(f"user memory index {i:d} out of range 0..7")
         if v < 0 or v > 255:
-            raise ValueError("user memory value %d out of range 0..255" % v)
+            raise ValueError(f"user memory value {v:d} out of range 0..255")
         self._burst_write(REG_USER_BASE + i, (v,))
 
     def user_memory_read_all(self):
@@ -860,7 +869,7 @@ class MAX31760(FaultMixin):
         """Write all 8 bytes of user memory (len(data) must be 8)."""
         d = bytes(bytearray(data))
         if len(d) != 8:
-            raise ValueError("expected 8 bytes, got %d" % len(d))
+            raise ValueError(f"expected 8 bytes, got {len(d):d}")
         self._burst_write(REG_USER_BASE, d)
 
     # -- presets (F24) -----------------------------------------------------------

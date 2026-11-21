@@ -62,7 +62,7 @@ class FaultMixin:
     def ff_dc_raw(self, raw):
         d = int(raw)
         if d < 0 or d > 255:
-            raise ValueError("FFDC %d out of range 0..255" % d)
+            raise ValueError(f"FFDC {d:d} out of range 0..255")
         self._burst_write(REG_FFDC, (d,))
 
     def set_ffdc_pct(self, pct):
@@ -96,7 +96,7 @@ class FaultMixin:
     def ff_mode(self, mode):
         m = int(mode)
         if m not in (FF_MODE_INTERRUPT, FF_MODE_COMPARATOR):
-            raise ValueError("unknown FF mode %d" % m)
+            raise ValueError(f"unknown FF mode {m:d}")
         self._cr2_rmw(CR2_FFMODE, CR2_FFMODE if m else 0)
 
     # -- RD / locked-rotor mode (F14) -------------------------------------------
@@ -139,6 +139,6 @@ class FaultMixin:
     def alert_mask(self, alarms):
         m = int(alarms)
         if m < 0 or m > MASK_ALARM_FIELD:
-            raise ValueError("alert mask 0x%02X out of range" % m)
+            raise ValueError(f"alert mask 0x{m:02X} out of range")
         v = self._burst_read(REG_MASK, 1)[0]
         self._burst_write(REG_MASK, (((v & ~MASK_ALARM_FIELD) | m) & 0xFF,))
