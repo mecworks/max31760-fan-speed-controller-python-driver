@@ -45,7 +45,8 @@ from max31760._core import (
     FACTORY_DEFAULTS, IDEALITY_TABLE, TACH_REF_HZ, POR_SETTLE_MS,
 )
 from max31760._transport_cp import TransportCP, _SmbusCompat
-from max31760._lut import lut_index_for_temp, build_lut_curve
+from max31760._lut import (
+    lut_index_for_temp, build_lut_curve, _bisect_left)
 import max31760._regs as regs_mod
 
 
@@ -468,6 +469,41 @@ class TestBuildLutCurve(unittest.TestCase):
                           [(20.0, -1.0), (40.0, 50.0)])
         self.assertRaises(ValueError, build_lut_curve,
                           [(20.0, 50.0), (40.0, 101.0)])
+
+
+class TestBisectLeftEquivalence(unittest.TestCase):
+    """The local _bisect_left must match CPython's bisect.bisect_left.
+
+    Guards the MicroPython stand-in (no bisect module in MicroPython stdlib)
+    against semantic drift; runs on host CPython where bisect exists.
+    """
+
+    def test_matches_stdlib_bisect(self):
+        import bisect
+        seqs = [
+            [17.0],
+            [17.0, 19.0, 21.0],
+            list(range(48)),
+            [10.0, 40.0, 90.0],
+            [1.5, 2.5, 3.5, 4.5, 5.5],
+        ]
+        for seq in seqs:
+            lo = min(seq) - 1.0
+            hi = max(seq) + 1.0
+            x = lo
+            while x <= hi:
+                self.assertEqual(_bisect_left(seq, x),
+                                 bisect.bisect_left(seq, x),
+                                 f"seq={seq} x={x}")
+                x += 0.5
+
+    def test_empty_and_bounds(self):
+        import bisect
+        self.assertEqual(_bisect_left([], 1.0), bisect.bisect_left([], 1.0))
+        seq = [5]
+        for x in (0.0, 4.999, 5.0, 5.001, 10.0):
+            self.assertEqual(_bisect_left(seq, x),
+                             bisect.bisect_left(seq, x))
 
 
 class TestLutAccess(unittest.TestCase):

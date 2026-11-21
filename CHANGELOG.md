@@ -92,7 +92,8 @@ Migration pattern: `dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)` becomes
 - Error messages migrated from `%`-formatting to f-strings (MicroPython
   >= 1.17 supports PEP 498; project baseline v1.29.0).
 - Duplicate big-endian 16-bit decodes consolidated into `_u16_get`/
-  `_u16_set` helpers; `build_lut_curve()` rewritten with `zip`/`bisect`.
+  `_u16_set` helpers; `build_lut_curve()` rewritten with `zip` and a local
+  binary-search helper (MicroPython's stdlib has no `bisect` module).
 - Lint gate amended: f-strings accepted; type annotations restricted to the
   five-name built-in whitelist.
 - Test suite grown 134 → 151 tests (facade-export, context-manager, repr,

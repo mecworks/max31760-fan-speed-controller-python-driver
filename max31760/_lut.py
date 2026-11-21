@@ -4,15 +4,32 @@ Window layout (datasheet Table 7): window 0 covers temperatures below
 18 C; each further window spans 2 C; window 47 saturates >= 110 C.
 Kept separate from _core.py to hold the protocol core under the size
 budget; depends only on _regs fixed-point helpers.
-"""
 
-import bisect
+NOTE: MicroPython's standard library has no bisect module (it ships in
+micropython-lib, which this package does not depend on), so the breakpoint
+search uses a local binary-search helper instead.
+"""
 
 from ._regs import LUT_LEN, pct_to_duty
 
 # Window geometry (Table 7).
 LUT_FIRST_BOUND_C = 18.0
 LUT_WINDOW_STEP_C = 2.0
+
+
+def _bisect_left(seq, x):
+    """Leftmost index i with seq[i] >= x (semantics of bisect.bisect_left).
+
+    Local stand-in because MicroPython has no bisect module.
+    """
+    lo, hi = 0, len(seq)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if seq[mid] < x:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
 
 
 def lut_index_for_temp(celsius: float) -> int:
@@ -52,7 +69,7 @@ def build_lut_curve(points):
         elif t >= pts[-1][0]:
             p = pts[-1][1]
         else:
-            j = bisect.bisect_left(temps, t) - 1
+            j = _bisect_left(temps, t) - 1
             t0, p0 = pts[j]
             t1, p1 = pts[j + 1]
             p = p0 + (p1 - p0) * (t - t0) / (t1 - t0)

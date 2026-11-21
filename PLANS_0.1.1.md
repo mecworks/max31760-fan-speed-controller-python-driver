@@ -49,7 +49,7 @@ result from v0.1.0.
 - [x] (2026-11-21) M6 COMPLETE: (a) f-string sweep per D-12 — 36 `%`-formatted error messages migrated to f-strings across the shared modules (`_core.py` 28, `_faults.py` 3, `_regs.py` 3, `_lut.py` 2 incl. the one rewritten in place); format specs limited to `:02X`, `:d`, `:.1f`, `:.3f`, `:.4f` (all supported on MicroPython ≥1.17); `tests/lint_subset.py` amended to ACCEPT `ast.JoinedStr` (docstring updated); `_transport_cp.py`/`cp.py` intentionally left on `%` (exempt, CPython-only). (b) `_u16_get`/`_u16_set` helpers added to `_core.py`; the seven duplicated `(raw[0] << 8) | raw[1]` decodes and both BE-encode writes now route through them (temp properties, setpoint plumbing, rpm, measure_tach_once ×2, tach_threshold get/set). (c) `build_lut_curve` rewritten: monotonicity check via `zip(pts, pts[1:])`, breakpoint search via `bisect.bisect_left` (equivalence verified against the old linear scan at exact-breakpoint ties). Board verification of f-string rendering + `bisect` import on the Pico W is folded into Phase H1 (the e2e suite exercises multiple ValueError paths on-device), consistent with D-10's merge-after-validation boundary. Gates green: **151 tests OK**, api-coverage PASS (97), lint PASS ×8 (gate now accepts f-strings), compileall clean.
 - [x] (2026-11-21) M7 COMPLETE: conservative built-in-type annotations per D-11 — 96 public signatures annotated across `_core.py` (71), `_faults.py` (16), `_regs.py` (6), `_lut.py` (1), plus both facade constructors; whitelist strictly {int, float, bytes, str, bool}; no typing imports, no container generics, no Optional, no future-annotations. Params/returns not expressible with the five names (transport objects, iterables, lists, None defaults) left unannotated; private methods and dunders untouched. `tests/lint_subset.py` amended: annotation nodes now checked against the whitelist (`ast.Name` + id ∈ set) instead of blanket-banned; `typing` added to BAD_MODULES; AnnAssign still banned. Board verification (import + construct + call annotated methods on-device) folds into Phase H1 per D-10's merge boundary. Gates green: **151 tests OK**, api-coverage PASS (97), lint PASS ×8, compileall clean.
 - [x] (2026-11-21) M8 COMPLETE: docstring surgery. (a) Bench narrative carved out of three `_core.py` docstrings (`_tx`, `_wait_eeprom_ready`, `soft_por`) into NEW `NOTES/06-eeprom-timing.md` (numbered per the NOTES/ 01–05 convention; dated bench record: NACK stalls during EEPROM commits, unsafe ack-polling in both directions, mid-transaction soft-POR errors incl. errno 121/bcm2835); the docstrings now state behavior + one-line rationale + pointer. (b) Per-method `Raises:` lines added across the public surface (D-08's six timeout-heavy methods plus setpoint/LUT/duty/PWM/tach/user-memory/preset setters and raw access); D-05 applied: `status_raw()`/`active_alarms()` now LEAD with the destructive-read warning, and `remote_diode_fault()` gained the missing latch-consumption caveat. (c) F#/D# legend pointers added to the `_core.py` and `_faults.py` module docstrings (both defined in PLANS.md: feature table + decisions & rationale §5.3). (d) ALL-CAPS demotion (WITHIN/BOTH/ZERO/HAPPENED/NO/IMPORTANT/PROPERTIES/CLEARS → sentence case; only the leading DESTRUCTIVE READ marker kept as an intentional attention signal). (e) Constructor docstrings added to core `__init__` and both facades (verified against TransportCP's handle-adoption/close semantics before documenting them). Gates green: **151 tests OK**, api-coverage PASS (97), lint PASS ×8, compileall clean.
-- [ ] M9: release — version bump 0.1.0 → 0.1.1, CHANGELOG entry, full host gates, hardware E2E Phase H1 (Pico W only), deferred Phase H2 (ESP32-S3 + RPi 3A+), merge to `main`, tag `v0.1.1`.
+- [~] (2026-11-21) M9 IN PROGRESS: release — version bump 0.1.0 → 0.1.1 DONE (`max31760/__init__.py` + `pyproject.toml`, verified by import); CHANGELOG entry DONE (leads with the D-04 BREAKING rename table per D-13; also repaired a pre-existing gap: the CPython-floor item sat under `[Unreleased]` although it shipped in 0.1.0 — moved into the [0.1.0] section). Full host gates green after each step. **SURPRISE (H1)**: `import bisect` FAILS on MicroPython v1.29.0 (the module ships in micropython-lib, not the stdlib) — M6's `bisect.bisect_left` rewrite broke the MicroPython target at first on-device import. FIX: local `_bisect_left()` helper in `_lut.py` (same semantics, zero imports), CHANGELOG wording corrected, new `TestBisectLeftEquivalence` (2 tests, pins equivalence against CPython's bisect; suite now 153). Also: mpremote 1.29.0 file transfer is broken (`cp`/`fs cp` fail with ENOENT/EACCES while `exec` works) — new `tools/deploy_mp.py` deploys via chunked base64 over exec with sha256 verification. **PHASE H1 COMPLETE ON PICO W (COM16)**: package deployed to `/lib/max31760/` (8 files, hash-verified); `pico_deploy_check.py` OK (version 0.1.1, verify True, 24.0 °C); `hw_smoke_test.py` → HW SMOKE TEST: PASS (duty sweep 0–100 %, rpm @100 % = 2323.8, EEPROM round trip CR1=1D, soft-POR survival, registers restored); `e2e_hardware_test.py` → E2E HARDWARE MATRIX: PASS, **12/12 sections**, configuration restored byte-for-byte (RAM verified + EEPROM saved). This run also validates f-string rendering, the property API, keyword fences, and the `_bisect_left` path on real hardware. REMAINING: Phase H2 (ESP32-S3 COM7, then RPi 3A+ — chip physically moves between benches; DEFERRED pending user go-ahead per standing order), then merge to `main` + tag `v0.1.1`.
 
 ## Surprises & Discoveries
 
@@ -71,6 +71,8 @@ Evidence: duplicate CR2/SR/EEX constant blocks at `_core.py` lines ~87–94 vs ~
 - Observation (M6, 2026-11-21): a triple-double-quoted string whose CONTENT ends in `"` cannot be closed with `"""` in the source of a transform script — the tokenizer terminates at the first three-quote run, leaving a dangling quote (SyntaxError). Workaround: delimit such strings with triple SINGLE quotes. Hit once while scripting the M6 f-string sweep.
 - Observation (M7, 2026-11-21): a function signature CANNOT break between the closing paren and a return annotation (`def f(...)\n -> bool:` is a SyntaxError — implicit continuation requires an open bracket). All wrapped annotated signatures therefore break INSIDE the parameter list; `recover_from_corruption` initially violated this and was caught by the compile gate.
 - Observation (M8, 2026-11-21): the F#/D# markers used throughout the driver's section headers and docstrings are DEFINED ONLY in PLANS.md (feature-item table ~line 144; decisions & rationale table §5.3 ~line 224) — no other repo document defines them, so the legend pointer had to name PLANS.md specifically. Also: `remote_diode_fault()` silently consumes the SR latch (it calls status_raw()) but its pre-M8 docstring omitted that; the mutual-exclusion rule documented on status_raw()/active_alarms() did not mention it.
+- SURPRISE (M9/H1, 2026-11-21): **MicroPython has NO `bisect` module** — `import bisect` raises ImportError on v1.29.0 (RP2040). The module lives in micropython-lib (installable via mip), which this package deliberately does not depend on. M6's `build_lut_curve` rewrite therefore failed at first on-device import during Phase H1. Fixed with a local `_bisect_left()` in `_lut.py` (semantics of `bisect.bisect_left`, guarded by `TestBisectLeftEquivalence` against CPython's stdlib). Lesson recorded for future idiom sweeps: "stdlib" means *CPython* stdlib; every shared-module import must be checked against the MicroPython built-in set (here: time, machine, gc, struct, binascii, math are present; bisect, functools, itertools, operator are NOT).
+- Observation (M9/H1, 2026-11-21): mpremote 1.29.0's file transfer is broken on this setup — `mpremote cp` and `fs cp` both fail (ENOENT even for existing destinations, EACCES writing to /) while `exec`, `run`, `fs ls/rm/mkdir/stat/sha256sum` all work. Workaround: `tools/deploy_mp.py` (chunked base64 writes through exec + device-side sha256sum verification).
 
 - Observation (2026-11-21, user directives incorporated as Revision 3): (a) NO co-author trailers on any commit; (b) merge + tag only after all three platforms validated (option a elected); (c) RPi 3A+ reachable at `marc@192.168.1.225` via SSH key auth; (d) exactly ONE MAX31760 module exists — it is physically relocated between benches, so hardware validation is strictly sequential (Pico W → ESP32-S3 → RPi 3A+), never concurrent.
 
@@ -740,6 +742,55 @@ M8 transcript (captured 2026-11-21):
     $ python tools/api_coverage.py
     public members: 97
     RESULT: PASS (all public members referenced by the suite)
+
+M9 Phase H1 transcript (captured 2026-11-21, Pico W COM16, MicroPython v1.29.0):
+
+    $ python tools/deploy_mp.py --port COM16        # after bisect fix
+    deploying 8 files to /lib/max31760 via COM16
+      __init__.py: 599 bytes OK
+      _core.py: 40280 bytes OK
+      _faults.py: 6261 bytes OK
+      _lut.py: 2594 bytes OK
+      _regs.py: 9387 bytes OK
+      _tables.py: 1348 bytes OK
+      _transport_mp.py: 1587 bytes OK
+      mp.py: 4489 bytes OK
+    DEPLOY OK
+    $ python -m mpremote connect port:COM16 run scripts/pico/pico_deploy_check.py
+    version 0.1.1
+    members 98
+    core size 40280
+    verify True
+    local temp C 24.0
+    OK
+    $ python -m mpremote connect port:COM16 run examples/hw_smoke_test.py
+    temps: local 24.0 C, remote 25.3 C
+    duty   0% ok (actual 0)
+    duty  25% ok (actual 64)
+    duty  50% ok (actual 128)
+    duty  75% ok (actual 192)
+    duty 100% ok (actual 255)
+    rpm @100%: 2323.8
+    eeprom round trip: CR1=1D (expected 1D)
+    post-POR CR1=1D (expected 1D)
+    control registers restored
+    HW SMOKE TEST: PASS
+    $ python -m mpremote connect port:COM16 run examples/e2e_hardware_test.py
+    [PASS] identity/probe/scan/user-memory (11 ms)
+    [PASS] temperature/setpoints/index-source (14 ms)
+    [PASS] manual-mode/duty/ramp/freq/polarity (12 ms)
+    [PASS] lut/bulk+index/helpers (26 ms)
+    [PASS] tach1/rpm/threshold (+port2 EXCLUDED-HW) (4015 ms)
+    [PASS] 3-wire one-shot measure_tach_once (62 ms)
+    [PASS] fault-domain round trips (15 ms)
+    [PASS] alert-mode/service/ideality (18 ms)
+    [PASS] eeprom/por/standby/recovery (3534 ms)
+    [PASS] spin-up/tacho-full bits (7 ms)
+    [PASS] presets register effects (11 ms)
+    [PASS] error model (ValueError paths) (9 ms)
+    configuration restored (RAM verified byte-for-byte)
+    sections: 12 passed, 0 failed
+    E2E HARDWARE MATRIX: PASS
 
 (Milestone transcripts — gate outputs, red→green demonstrations, Pico W probe and E2E
 matrix results, merge/tag records — are appended here as each milestone lands.)
