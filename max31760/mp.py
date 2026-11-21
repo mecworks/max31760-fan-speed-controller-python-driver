@@ -87,7 +87,7 @@ __all__ = [
 class MAX31760(_Core):
     """MAX31760 driver bound to a MicroPython machine.I2C instance."""
 
-    def __init__(self, i2c, addr=0x50):
+    def __init__(self, i2c, addr: int = 0x50):
         super().__init__(TransportMP(i2c, addr), addr)
 
     def close(self):

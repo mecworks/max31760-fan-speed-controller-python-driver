@@ -102,7 +102,7 @@ class MAX31760(FaultMixin):
     EEX_BLOCK_40_4F = EEX_BLOCK_40_4F
     EEX_ALL_BLOCKS = EEX_ALL_BLOCKS
 
-    def __init__(self, transport, addr=0x50):
+    def __init__(self, transport, addr: int = 0x50):
         a = int(addr)
         if a < ADDR_MIN or a > ADDR_MAX:
             raise ValueError(
@@ -212,15 +212,15 @@ class MAX31760(FaultMixin):
 
     # -- public raw access (F22) --------------------------------------------
 
-    def read_reg(self, reg, n=1):
+    def read_reg(self, reg: int, n: int = 1) -> bytes:
         """Raw burst read of n bytes starting at reg (0x00..0x5A). -> bytes"""
         return self._burst_read(reg, n)
 
-    def write_reg(self, reg, buf):
+    def write_reg(self, reg: int, buf: bytes):
         """Raw page-safe write of buf (1..N bytes) starting at reg (0x00..0x5B)."""
         self._burst_write(reg, buf)
 
-    def probe(self):
+    def probe(self) -> bool:
         """Address ACK check. -> bool"""
         return self._t.probe()
 
@@ -233,7 +233,7 @@ class MAX31760(FaultMixin):
         """
         return [int(a) for a in self._t.scan()]
 
-    def verify(self):
+    def verify(self) -> bool:
         """Self-test: confirm the device acknowledges at the bound address.
 
         Raises OSError if the device does not answer. Returns True on success.
@@ -245,52 +245,52 @@ class MAX31760(FaultMixin):
     # -- temperatures & setpoints (F2, F3) -----------------------------------
 
     @property
-    def local_temp_c(self):
+    def local_temp_c(self) -> float:
         """Local (IC die) temperature in degrees C (float, 0.125 resolution)."""
         return raw16_to_temp(self._u16_get(REG_LTH))
 
     @property
-    def remote_temp_c(self):
+    def remote_temp_c(self) -> float:
         """Remote diode-junction temperature in degrees C (float, 0.125 res.)."""
         return raw16_to_temp(self._u16_get(REG_RTH))
 
     @property
-    def local_high_c(self):
+    def local_high_c(self) -> float:
         """Local high set point (LHS) in degrees C."""
         return self._setpoint_get(REG_LHSH)
 
     @local_high_c.setter
-    def local_high_c(self, celsius):
+    def local_high_c(self, celsius: float):
         """Set the local high set point (LHS), degrees C (-128..+127.875)."""
         self._setpoint_set(REG_LHSH, celsius)
 
     @property
-    def remote_high_c(self):
+    def remote_high_c(self) -> float:
         """Remote high set point (RHS) in degrees C."""
         return self._setpoint_get(REG_RHSH)
 
     @remote_high_c.setter
-    def remote_high_c(self, celsius):
+    def remote_high_c(self, celsius: float):
         """Set the remote high set point (RHS), degrees C (-128..+127.875)."""
         self._setpoint_set(REG_RHSH, celsius)
 
     @property
-    def local_overtemp_c(self):
+    def local_overtemp_c(self) -> float:
         """Local overtemperature set point (LOTS) in degrees C."""
         return self._setpoint_get(REG_LOTSH)
 
     @local_overtemp_c.setter
-    def local_overtemp_c(self, celsius):
+    def local_overtemp_c(self, celsius: float):
         """Set the local overtemperature set point (LOTS), degrees C."""
         self._setpoint_set(REG_LOTSH, celsius)
 
     @property
-    def remote_overtemp_c(self):
+    def remote_overtemp_c(self) -> float:
         """Remote overtemperature set point (ROTS) in degrees C."""
         return self._setpoint_get(REG_ROTSH)
 
     @remote_overtemp_c.setter
-    def remote_overtemp_c(self, celsius):
+    def remote_overtemp_c(self, celsius: float):
         """Set the remote overtemperature set point (ROTS), degrees C."""
         self._setpoint_set(REG_ROTSH, celsius)
 
@@ -327,11 +327,11 @@ class MAX31760(FaultMixin):
                 f"LUT needs {LUT_LEN:d} entries, got {len(vals):d}")
         self._burst_write(REG_LUT_BASE, vals)
 
-    def lut_get_index(self, index):
+    def lut_get_index(self, index: int) -> int:
         """Read one LUT entry (index 0..47). -> duty raw."""
         return self._burst_read(REG_LUT_BASE + self._lut_idx(index), 1)[0]
 
-    def lut_set_index(self, index, duty):
+    def lut_set_index(self, index: int, duty: int):
         """Write one LUT entry (index 0..47) with a duty raw (0..255)."""
         v = int(duty)
         if v < 0 or v > 255:
@@ -366,7 +366,7 @@ class MAX31760(FaultMixin):
     # F6: manual (direct) mode
 
     @property
-    def manual(self):
+    def manual(self) -> bool:
         """Direct/manual fan control (CR2.DFC); assign True/False to toggle.
 
         Enabled: PWMR commands the output. Disabled: automatic LUT mode governs.
@@ -374,55 +374,55 @@ class MAX31760(FaultMixin):
         return bool(self._burst_read(REG_CR2, 1)[0] & CR2_DFC)
 
     @manual.setter
-    def manual(self, on):
+    def manual(self, on: bool):
         self._cr2_rmw(CR2_DFC, CR2_DFC if on else 0)
 
-    def set_duty_pct(self, pct):
+    def set_duty_pct(self, pct: float):
         """Set the commanded fan duty, percent 0..100 (written to PWMR)."""
         self._burst_write(REG_PWMR, (pct_to_duty(pct),))
 
     @property
-    def duty_cmd_raw(self):
+    def duty_cmd_raw(self) -> int:
         """Commanded duty (PWMR), raw 0..255; assign to write."""
         return self._burst_read(REG_PWMR, 1)[0]
 
     @duty_cmd_raw.setter
-    def duty_cmd_raw(self, raw):
+    def duty_cmd_raw(self, raw: int):
         d = int(raw)
         if d < 0 or d > 255:
             raise ValueError(f"duty {d:d} out of range 0..255")
         self._burst_write(REG_PWMR, (d,))
 
     @property
-    def actual_duty_raw(self):
+    def actual_duty_raw(self) -> int:
         """Actual output duty (PWMV, RO), raw 0..255."""
         return self._burst_read(REG_PWMV, 1)[0]
 
     @property
-    def actual_duty_pct(self):
+    def actual_duty_pct(self) -> float:
         """Actual output duty (PWMV, RO) as a percent float."""
         return duty_to_pct(self.actual_duty_raw)
 
     # F7: automatic-mode configuration
 
     @property
-    def index_source(self):
+    def index_source(self) -> int:
         """LUT index source (one of the INDEX_* constants); assign to select."""
         return self._burst_read(REG_CR1, 1)[0] & (CR1_MTI | CR1_TIS)
 
     @index_source.setter
-    def index_source(self, source):
+    def index_source(self, source: int):
         if source not in (INDEX_LOCAL, INDEX_REMOTE, INDEX_MAX):
             raise ValueError(f"unknown index source 0x{int(source):02X}")
         self._cr1_rmw(CR1_MTI | CR1_TIS, source)
 
     @property
-    def hysteresis_c(self):
+    def hysteresis_c(self) -> int:
         """LUT hysteresis in degrees C (2 or 4); assign to change."""
         return 4 if self._burst_read(REG_CR1, 1)[0] & CR1_HYST else 2
 
     @hysteresis_c.setter
-    def hysteresis_c(self, celsius):
+    def hysteresis_c(self, celsius: int):
         c = int(celsius)
         if c not in (2, 4):
             raise ValueError("hysteresis must be 2 or 4 C")
@@ -431,7 +431,7 @@ class MAX31760(FaultMixin):
     # F8: PWM output configuration
 
     @property
-    def pwm_freq_hz(self):
+    def pwm_freq_hz(self) -> int:
         """PWM frequency in Hz (33, 150, 1500 or 25000); assign to change.
 
         Raises ValueError on write if hz is not one of the four supported
@@ -446,7 +446,7 @@ class MAX31760(FaultMixin):
         raise ValueError(f"unknown PWM DRV bits 0x{v:02X}")
 
     @pwm_freq_hz.setter
-    def pwm_freq_hz(self, hz):
+    def pwm_freq_hz(self, hz: int):
         h = int(hz)
         for f, b in _PWM_FREQ_TO_BITS:
             if h == f:
@@ -456,7 +456,7 @@ class MAX31760(FaultMixin):
             f"PWM frequency {h:d} Hz unsupported (use 33/150/1500/25000)")
 
     @property
-    def pwm_polarity(self):
+    def pwm_polarity(self) -> int:
         """PWM polarity (POLARITY_POSITIVE or POLARITY_NEGATIVE);
         assign to change."""
         if self._burst_read(REG_CR1, 1)[0] & CR1_PPS_NEGATIVE:
@@ -464,7 +464,7 @@ class MAX31760(FaultMixin):
         return _POLARITY_POSITIVE
 
     @pwm_polarity.setter
-    def pwm_polarity(self, polarity):
+    def pwm_polarity(self, polarity: int):
         p = int(polarity)
         if p not in (_POLARITY_POSITIVE, _POLARITY_NEGATIVE):
             raise ValueError("polarity must be POLARITY_POSITIVE or POLARITY_NEGATIVE")
@@ -473,18 +473,19 @@ class MAX31760(FaultMixin):
     # -- ramp rate & duty settling (F9) ---------------------------------------
 
     @property
-    def ramp_rate(self):
+    def ramp_rate(self) -> int:
         """Duty ramp rate (one of the RAMP_* constants); assign to change."""
         return self._burst_read(REG_CR3, 1)[0] & CR3_RAMP_MASK
 
     @ramp_rate.setter
-    def ramp_rate(self, rate):
+    def ramp_rate(self, rate: int):
         if rate not in (RAMP_SLOW, RAMP_MED_SLOW, RAMP_MED_FAST, RAMP_IMMEDIATE):
             raise ValueError(f"unknown ramp rate 0x{int(rate):02X}")
         v = self._burst_read(REG_CR3, 1)[0]
         self._burst_write(REG_CR3, (((v & ~CR3_RAMP_MASK) | rate) & 0xFF,))
 
-    def wait_for_duty(self, target_pct, *, timeout_ms=2000):
+    def wait_for_duty(self, target_pct: float, *,
+                      timeout_ms: int = 2000) -> bool:
         """Wait until the actual output duty (PWMV) reaches target_pct.
 
         Returns True when reached; raises TimeoutError after timeout_ms.
@@ -507,24 +508,24 @@ class MAX31760(FaultMixin):
     # -- tachometer inputs (F11, F12) ------------------------------------------
 
     @property
-    def tach1_enabled(self):
+    def tach1_enabled(self) -> bool:
         """TACH1 counting enabled (CR3.TACH1E); assign True/False to toggle."""
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_TACH1E)
 
     @tach1_enabled.setter
-    def tach1_enabled(self, on):
+    def tach1_enabled(self, on: bool):
         self._cr3_rmw(CR3_TACH1E, CR3_TACH1E if on else 0)
 
     @property
-    def tach2_enabled(self):
+    def tach2_enabled(self) -> bool:
         """TACH2 counting enabled (CR3.TACH2E); assign True/False to toggle."""
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_TACH2E)
 
     @tach2_enabled.setter
-    def tach2_enabled(self, on):
+    def tach2_enabled(self, on: bool):
         self._cr3_rmw(CR3_TACH2E, CR3_TACH2E if on else 0)
 
-    def rpm(self, port=1, pulses_per_rev=2):
+    def rpm(self, port: int = 1, pulses_per_rev: int = 2) -> float:
         """Read the fan speed on port 1 or 2 in RPM.
 
         pulses_per_rev is the fan's tach output frequency per revolution
@@ -545,7 +546,7 @@ class MAX31760(FaultMixin):
         return (60.0 * TACH_REF_HZ) / (count * n)
 
     @property
-    def tach_threshold(self):
+    def tach_threshold(self) -> int:
         """Minimum-RPM fail threshold (TCTH:TCTL), 0..65535; assign to set.
 
         The fan is considered failed when its measured count exceeds this
@@ -554,7 +555,7 @@ class MAX31760(FaultMixin):
         return self._u16_get(REG_TCTH)
 
     @tach_threshold.setter
-    def tach_threshold(self, count):
+    def tach_threshold(self, count: int):
         c = int(count)
         if c < 0 or c > 0xFFFF:
             raise ValueError(f"threshold {c:d} out of range 0..65535")
@@ -563,7 +564,7 @@ class MAX31760(FaultMixin):
     # -- 3-wire assist & spin-up (F10, F15) ------------------------------------
 
     @property
-    def spin_up_enabled(self):
+    def spin_up_enabled(self) -> bool:
         """Fan spin-up enabled (CR2.SPEN); assign True/False to toggle.
 
         When enabled, any change of the selected duty from zero to nonzero
@@ -574,11 +575,11 @@ class MAX31760(FaultMixin):
         return bool(self._burst_read(REG_CR2, 1)[0] & CR2_SPEN)
 
     @spin_up_enabled.setter
-    def spin_up_enabled(self, on):
+    def spin_up_enabled(self, on: bool):
         self._cr2_rmw(CR2_SPEN, CR2_SPEN if on else 0)
 
     @property
-    def pulse_stretch_enabled(self):
+    def pulse_stretch_enabled(self) -> bool:
         """Periodic pulse stretching enabled (CR3.PSEN);
         assign True/False to toggle.
 
@@ -590,11 +591,11 @@ class MAX31760(FaultMixin):
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_PSEN)
 
     @pulse_stretch_enabled.setter
-    def pulse_stretch_enabled(self, on):
+    def pulse_stretch_enabled(self, on: bool):
         self._cr3_rmw(CR3_PSEN, CR3_PSEN if on else 0)
 
     @property
-    def tacho_full_enabled(self):
+    def tacho_full_enabled(self) -> bool:
         """TACHFULL mode enabled (CR3.TACHFULL); assign True/False to toggle.
 
         When set, TACH measurements are valid only at 100 % duty and fan-fail
@@ -604,10 +605,11 @@ class MAX31760(FaultMixin):
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_TACHFULL)
 
     @tacho_full_enabled.setter
-    def tacho_full_enabled(self, on):
+    def tacho_full_enabled(self, on: bool):
         self._cr3_rmw(CR3_TACHFULL, CR3_TACHFULL if on else 0)
 
-    def measure_tach_once(self, port=1, *, timeout_ms=3000):
+    def measure_tach_once(
+            self, port: int = 1, *, timeout_ms: int = 3000) -> int:
         """One-shot TACH counter update via pulse stretching (PSEN).
 
         Sets PSEN, waits up to timeout_ms for the TC register to update
@@ -647,7 +649,7 @@ class MAX31760(FaultMixin):
     # -- ALERT service & ideality factor (F18, F19) -----------------------------
 
     @property
-    def alert_mode(self):
+    def alert_mode(self) -> int:
         """ALERT output behaviour (CR2.ALERTS); assign to select:
         ALERT_MODE_INTERRUPT (latched, serviced via service_alert(); factory
         default) or ALERT_MODE_FAULT_INDICATOR (tracks the live LHA/RHA
@@ -657,14 +659,14 @@ class MAX31760(FaultMixin):
         return ALERT_MODE_INTERRUPT
 
     @alert_mode.setter
-    def alert_mode(self, mode):
+    def alert_mode(self, mode: int):
         m = int(mode)
         if m not in (ALERT_MODE_INTERRUPT, ALERT_MODE_FAULT_INDICATOR):
             raise ValueError(f"unknown alert mode {m:d}")
         self._cr2_rmw(CR2_ALERTS,
                       CR2_ALERTS if m == ALERT_MODE_FAULT_INDICATOR else 0)
 
-    def service_alert(self):
+    def service_alert(self) -> int:
         """Step 2 of the datasheet ALERT interrupt-service sequence: read SR.
 
         Reading SR identifies the cause and clears LHA/RHA/LOTA/ROTA; the
@@ -675,7 +677,7 @@ class MAX31760(FaultMixin):
         """
         return self.status_raw()
 
-    def alert_masked(self):
+    def alert_masked(self) -> bool:
         """True while ALTMSK (CR1.7) masks new ALERT assertions."""
         return bool(self._burst_read(REG_CR1, 1)[0] & CR1_ALTMSK)
 
@@ -686,13 +688,13 @@ class MAX31760(FaultMixin):
         self._cr1_rmw(CR1_ALTMSK, 0)
 
     @property
-    def ideality_factor_index(self):
+    def ideality_factor_index(self) -> int:
         """Ideality-factor table index (IFR bits [5:0]), 0..63;
         assign to change. Reserved upper bits stay 0."""
         return self._burst_read(REG_IFR, 1)[0] & IFR_INDEX_MASK
 
     @ideality_factor_index.setter
-    def ideality_factor_index(self, idx):
+    def ideality_factor_index(self, idx: int):
         i = int(idx)
         if i < 0 or i >= len(IDEALITY_TABLE):
             raise ValueError(
@@ -702,11 +704,11 @@ class MAX31760(FaultMixin):
         self._burst_write(REG_IFR, (((v & ~IFR_INDEX_MASK) | i) & 0xFF,))
 
     @property
-    def ideality_factor(self):
+    def ideality_factor(self) -> float:
         """The ideality factor currently programmed (table lookup), float."""
         return IDEALITY_TABLE[self.ideality_factor_index]
 
-    def set_ideality_factor(self, n):
+    def set_ideality_factor(self, n: float) -> int:
         """Program the ideality factor closest to n (nearest-match table
         lookup) and return the index used. Raises ValueError if n lies
         outside the table range (0.9844 .. 1.0489); ties resolve to the
@@ -727,7 +729,9 @@ class MAX31760(FaultMixin):
 
     # -- EEPROM lifecycle (F20) --------------------------------------------------
 
-    def save_config(self, blocks=EEX_ALL_BLOCKS, *, timeout_ms=2000):
+    def save_config(
+            self, blocks: int = EEX_ALL_BLOCKS,
+            *, timeout_ms: int = 2000):
         """Write RAM to EEPROM for the selected blocks (EEX, L/W=0).
 
         blocks is a bitmask of EEX_BLOCK_* constants (default: all). Per the
@@ -742,7 +746,9 @@ class MAX31760(FaultMixin):
         self._burst_write(REG_EEX, ((b & EEX_ALL_BLOCKS),))
         self._wait_eeprom_ready(timeout_ms)
 
-    def load_config(self, blocks=EEX_ALL_BLOCKS, *, timeout_ms=2000):
+    def load_config(
+            self, blocks: int = EEX_ALL_BLOCKS,
+            *, timeout_ms: int = 2000):
         """Load EEPROM into RAM for the selected blocks (EEX, L/W=1).
 
         Same block-select semantics and busy-window wait as save_config().
@@ -778,7 +784,7 @@ class MAX31760(FaultMixin):
                 f"EEPROM busy after {limit:d} ms (need >= {EEPROM_WAIT_MS:d})")
         self._t.delay_ms(EEPROM_WAIT_MS)
 
-    def eeprom_corrupt(self):
+    def eeprom_corrupt(self) -> bool:
         """True if SR.PC indicates an EEPROM program-corruption event.
 
         PC persists across SR reads (unlike the other alarm bits) and only
@@ -787,7 +793,7 @@ class MAX31760(FaultMixin):
         """
         return bool(self.status_raw() & SR_PC)
 
-    def recover_from_corruption(self, *, timeout_ms=2000):
+    def recover_from_corruption(self, *, timeout_ms: int = 2000) -> bool:
         """Recover from a program-corrupt condition (SR.PC set).
 
         Re-writes ALL blocks from the current RAM (which must hold the
@@ -800,7 +806,7 @@ class MAX31760(FaultMixin):
 
     # -- lifecycle: soft POR, standby, user memory (F21) ------------------------
 
-    def soft_por(self, *, settle_ms=1000):
+    def soft_por(self, *, settle_ms: int = 1000):
         """Issue a software power-on reset (CR1.SW_POR, self-clearing).
 
         The device resets and reloads RAM from EEPROM; latched alarms and
@@ -835,23 +841,23 @@ class MAX31760(FaultMixin):
         self._wait_eeprom_ready(POR_SETTLE_MS)
 
     @property
-    def standby(self):
+    def standby(self) -> bool:
         """Standby mode (CR2.STBY): sensing/PWM off, I2C stays active.
         Assign True to enter, False to exit."""
         return bool(self._burst_read(REG_CR2, 1)[0] & CR2_STBY)
 
     @standby.setter
-    def standby(self, on):
+    def standby(self, on: bool):
         self._cr2_rmw(CR2_STBY, CR2_STBY if on else 0)
 
-    def user_memory_get(self, index=0):
+    def user_memory_get(self, index: int = 0) -> int:
         """Read one byte of general-purpose user memory (10h..17h), 0..7."""
         i = int(index)
         if i < 0 or i > 7:
             raise ValueError(f"user memory index {i:d} out of range 0..7")
         return self._burst_read(REG_USER_BASE + i, 1)[0]
 
-    def user_memory_set(self, index, value):
+    def user_memory_set(self, index: int, value: int):
         """Write one byte of general-purpose user memory (10h..17h), 0..7."""
         i = int(index)
         v = int(value)
@@ -861,11 +867,11 @@ class MAX31760(FaultMixin):
             raise ValueError(f"user memory value {v:d} out of range 0..255")
         self._burst_write(REG_USER_BASE + i, (v,))
 
-    def user_memory_read_all(self):
+    def user_memory_read_all(self) -> bytes:
         """All 8 bytes of user memory as a bytes object."""
         return self._burst_read(REG_USER_BASE, 8)
 
-    def user_memory_write_all(self, data):
+    def user_memory_write_all(self, data: bytes):
         """Write all 8 bytes of user memory (len(data) must be 8)."""
         d = bytes(bytearray(data))
         if len(d) != 8:
@@ -888,7 +894,8 @@ class MAX31760(FaultMixin):
             raise ValueError("port must be 1 or 2")
         self.clear_fan_fail()
 
-    def configure_4wire_fan(self, port=1, pwm_freq_hz=PWM_FREQ_25KHZ):
+    def configure_4wire_fan(
+            self, port: int = 1, pwm_freq_hz: int = PWM_FREQ_25KHZ):
         """Standard 4-wire fan on the given port (datasheet Figure 2a).
 
         Sets the recommended 25 kHz PWM frequency, enables the port's
@@ -901,7 +908,7 @@ class MAX31760(FaultMixin):
         self.pwm_freq_hz = pwm_freq_hz
         self._single_port_hygiene(port)
 
-    def configure_3wire_supply_modulation(self, port=1):
+    def configure_3wire_supply_modulation(self, port: int = 1):
         """3-wire fan driven by PWM supply modulation (Figure 2b).
 
         The fan supply rail is chopped by the PWM output, so the typical
@@ -915,7 +922,7 @@ class MAX31760(FaultMixin):
         self.pulse_stretch_enabled = True
         self._single_port_hygiene(port)
 
-    def configure_two_fans(self, pwm_freq_hz=PWM_FREQ_25KHZ):
+    def configure_two_fans(self, pwm_freq_hz: int = PWM_FREQ_25KHZ):
         """Two fans, one per port (both monitored).
 
         Enables both tachometers and clears any latched fan-fail. Note the

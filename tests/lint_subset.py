@@ -7,6 +7,9 @@ Checks (per PLANS.md verification item 2):
   - no async/await, yield-from, walrus operator
   (f-strings ARE allowed since M6/D-12: MicroPython supports PEP 498 from v1.17;
    the project baseline is v1.29.0. @property is likewise allowed.)
+  Type annotations are restricted (D-11) to bare built-in names from the
+  whitelist {int, float, bytes, str, bool}; subscripted/container generics,
+  Optional, typing-module imports and AnnAssign remain banned.
 Shared files: _regs.py, _core.py, _transport_mp.py, mp.py, __init__.py
 Exempt (CPython-only by design): _transport_cp.py, cp.py
 """
@@ -27,8 +30,15 @@ SHARED = [
 BAD_MODULES = {
     "os", "sys", "json", "struct", "logging", "subprocess", "threading",
     "socket", "urllib", "http", "sqlite3", "smbus", "smbus2", "ctypes",
-    "multiprocessing", "queue", "select", "signal",
+    "multiprocessing", "queue", "select", "signal", "typing",
 }
+
+# D-11: only these bare built-in names may appear as annotations.
+ALLOWED_ANNOTATIONS = {"int", "float", "bytes", "str", "bool"}
+
+
+def _ok_annotation(node):
+    return isinstance(node, ast.Name) and node.id in ALLOWED_ANNOTATIONS
 
 
 def check(path):
@@ -57,11 +67,13 @@ def check(path):
                 params.append(node.args.vararg)
             if node.args.kwarg is not None:
                 params.append(node.args.kwarg)
-            if any(p.annotation is not None for p in params):
-                problems.append("arg annotation in %s line %d"
+            if any(p.annotation is not None and not _ok_annotation(p.annotation)
+                   for p in params):
+                problems.append("disallowed arg annotation in %s line %d"
                                 % (node.name, node.lineno))
-            if node.returns is not None:
-                problems.append("return annotation in %s line %d" % (node.name, node.lineno))
+            if node.returns is not None and not _ok_annotation(node.returns):
+                problems.append("disallowed return annotation in %s line %d"
+                                % (node.name, node.lineno))
         elif isinstance(node, ast.AnnAssign):
             problems.append("annotation at line %d" % node.lineno)
         elif isinstance(node, ast.JoinedStr):

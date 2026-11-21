@@ -86,7 +86,7 @@ __all__ = [
 class MAX31760(_Core):
     """MAX31760 driver bound to a Linux SMBus/I2C bus."""
 
-    def __init__(self, bus=1, addr=0x50, handle=None):
+    def __init__(self, bus: int = 1, addr: int = 0x50, handle=None):
         super().__init__(TransportCP(bus, addr, handle), addr)
 
     def close(self):

@@ -15,7 +15,7 @@ LUT_FIRST_BOUND_C = 18.0
 LUT_WINDOW_STEP_C = 2.0
 
 
-def lut_index_for_temp(celsius):
+def lut_index_for_temp(celsius: float) -> int:
     """Map a temperature in C to its LUT window index (0..47)."""
     t = float(celsius)
     if t < LUT_FIRST_BOUND_C:

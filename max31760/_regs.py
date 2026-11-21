@@ -157,7 +157,7 @@ _PWM_FREQ_TO_BITS = ((PWM_FREQ_33HZ, CR1_DRV_33HZ),
 # Fixed-point helpers (A4)
 # ---------------------------------------------------------------------------
 
-def temp_to_raw16(celsius):
+def temp_to_raw16(celsius: float) -> int:
     """Encode a Celsius float to the 16-bit left-aligned two's-complement raw.
 
     LSB = bit5 = 0.125 C. Input must lie within -128.0 .. +127.875 C and is
@@ -172,7 +172,7 @@ def temp_to_raw16(celsius):
     return (q << 5) & 0xFFFF
 
 
-def raw16_to_temp(raw16):
+def raw16_to_temp(raw16: int) -> float:
     """Decode a 16-bit left-aligned two's-complement raw to Celsius float."""
     v = raw16 & 0xFFFF
     if v & 0x8000:
@@ -180,7 +180,7 @@ def raw16_to_temp(raw16):
     return (v >> 5) / 8.0
 
 
-def duty_to_pct(duty):
+def duty_to_pct(duty: int) -> float:
     """Duty raw (0..255) to percent float (0..99.609...)."""
     d = int(duty)
     if d < 0 or d > 255:
@@ -188,7 +188,7 @@ def duty_to_pct(duty):
     return d * 100.0 / 256.0
 
 
-def pct_to_duty(pct):
+def pct_to_duty(pct: float) -> int:
     """Percent (0..100) to duty raw (0..255), rounded."""
     p = float(pct)
     if p < 0.0 or p > 100.0:
@@ -199,7 +199,7 @@ def pct_to_duty(pct):
     return d
 
 
-def rpm_from_count(count, pulses_per_rev=2):
+def rpm_from_count(count: int, pulses_per_rev: int = 2) -> float:
     """Convert an average TC count (clock ticks/pulse @100 kHz) to RPM.
 
     Returns 0.0 for count <= 0 (fan stopped / no pulses). Overflow of the
@@ -216,7 +216,7 @@ def rpm_from_count(count, pulses_per_rev=2):
     return 60.0 * TACH_REF_HZ / float(c) / float(n)
 
 
-def count_from_rpm(rpm, pulses_per_rev=2):
+def count_from_rpm(rpm: float, pulses_per_rev: int = 2) -> int:
     """Inverse of rpm_from_count, clamped to the 16-bit unsigned range."""
     n = int(pulses_per_rev)
     if n <= 0:
