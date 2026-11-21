@@ -1454,6 +1454,34 @@ class TestApiParity(unittest.TestCase):
                 self.assertEqual(m, c, "constant mismatch: %s" % name)
 
 
+class TestFacadeExports(unittest.TestCase):
+    """M4 (D-08): entry modules honestly advertise their exports."""
+
+    def test_root_all_is_explicit_and_honest(self):
+        import max31760 as pkg
+        self.assertEqual(pkg.__all__, ["__version__"])
+        for name in pkg.__all__:
+            self.assertTrue(hasattr(pkg, name))
+
+    def test_facade_exports_resolve(self):
+        import max31760.mp as mp_mod
+        import max31760.cp as cp_mod
+        for mod in (mp_mod, cp_mod):
+            for name in mod.__all__:
+                self.assertTrue(hasattr(mod, name),
+                                "%s in %s.__all__ but not bound" %
+                                (name, mod.__name__))
+
+    def test_register_map_importable_from_entry_points(self):
+        from max31760.mp import REG_SR, pct_to_duty, RAMP_IMMEDIATE
+        self.assertEqual(REG_SR, 0x5A)
+        self.assertEqual(pct_to_duty(50.0), 128)
+        self.assertEqual(RAMP_IMMEDIATE, 0x30)
+        from max31760.cp import REG_EEX, rpm_from_count
+        self.assertEqual(REG_EEX, 0x5B)
+        self.assertEqual(rpm_from_count(0), 0.0)
+
+
 class TestContextManager(unittest.TestCase):
     """M2: MAX31760 supports the with-statement (Item 66)."""
 

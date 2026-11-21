@@ -44,7 +44,7 @@ result from v0.1.0.
 - [x] (2026-11-21) M1 COMPLETE (commit a186994): `max31760/_regs.py` created as leaf module (zero package imports); `_core.py` shrunk by ~270 lines (constants region + six helpers moved out; NOTE comment and mid-file `from ._faults import FaultMixin` deleted, import moved to top); `_faults.py`/`_lut.py` now import from `_regs`; lint gate covers 8 files; new `TestRegsModule` (4 tests). Gates green: **138 tests OK** (134 baseline UNMODIFIED + 4 new — proves zero value drift), api-coverage PASS (124 members), lint PASS ×8, compileall clean; import-order independence verified (`import max31760._faults` and `import max31760._lut` directly now succeed without importing `_core` first).
 - [x] (2026-11-21) M2 COMPLETE (commit 5490987): `__enter__`/`__exit__` (never suppresses) + no-op core `close()` (facades override); `__repr__` → `<MAX31760 addr=0xNN>`; zero-arg `super()` in cp/mp; `(object)` dropped from all four classes; `_SmbusCompat.read_i2c_block_data` raises OSError on short legacy payloads; `soft_por` uses named `POR_SETTLE_MS`. New tests: `TestContextManager` (4), `TestRepr` (1), `TestSmbusCompatContract` (2); `POR_SETTLE_MS` pinned in `TestConstants`. Gates green: **145 tests OK**, api-coverage PASS (**125** public members — `close` added to core surface, covered), lint PASS ×8, compileall clean.
 - [x] (2026-11-21) M3 COMPLETE: `measure_tach_once` raises TimeoutError when the count never changes (PSEN still cleared via finally); `get_pwm_freq_hz` raises ValueError on unknown DRV combo instead of guessing 33 Hz; keyword-only fences (`*, timeout_ms=` / `*, settle_ms=`) on wait_for_duty, measure_tach_once, save_config, load_config, recover_from_corruption, soft_por; internal call site fixed (`recover_from_corruption → save_config(..., timeout_ms=timeout_ms)`). Red→green demonstrated (transcript in Artifacts and Notes). Gates green: **148 tests OK**, api-coverage PASS (125), lint PASS ×8, compileall clean.
-- [ ] M4: honest package facade — root `__all__`, extended mp/cp `__all__`, fix the lying export comment.
+- [x] (2026-11-21) M4 COMPLETE: root `__init__.py` now declares explicit `__all__ = ["__version__"]` with an honest docstring (no eager submodule imports); mp.py/cp.py re-export the full public surface (113 names from `_regs` + MAX31760 + 2 LUT helpers = 116 per facade) with byte-identical `__all__` lists (generated cp.py from mp.py; parity test enforces identity); the lying class-body comment in `_core.py` fixed to state what is actually true. New `TestFacadeExports` (3 tests). Gates green: **151 tests OK**, api-coverage PASS (125), lint PASS ×8, compileall clean.
 - [ ] M5: accessor unification (properties for state, verbs for actions) per approved D-04; update tests, examples, scripts, docs.
 - [ ] M6: idiom sweep — f-string migration (with lint-gate update), `_u16_get`/`_u16_set` helpers, `zip`/`bisect` in `build_lut_curve`.
 - [ ] M7: conservative built-in-type annotations on public signatures (with lint-gate relaxation); board-verified on Pico W.
@@ -686,6 +686,15 @@ RED — new/flipped tests run against pre-M3 core (git show 5490987:_core.py),
 GREEN — same suite against the M3 core:
 
     Ran 148 tests in 2.146s
+    OK
+    $ python tools/api_coverage.py
+    public members: 125
+    RESULT: PASS (all public members referenced by the suite)
+
+M4 transcript (captured 2026-11-21):
+
+    $ python -m unittest discover tests
+    Ran 151 tests in 2.153s
     OK
     $ python tools/api_coverage.py
     public members: 125

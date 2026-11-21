@@ -57,7 +57,9 @@ from ._faults import FaultMixin
 class MAX31760(FaultMixin):
     """MAX31760 device API bound to a transport (see module docstring)."""
 
-    # Public constants (usable as MAX31760.XXX; also exported by mp/cp).
+    # Public constants mirrored as class attributes (usable as
+    # MAX31760.XXX); also importable at module level from the mp/cp
+    # entry points (see their __all__).
     INDEX_LOCAL = INDEX_LOCAL
     INDEX_REMOTE = INDEX_REMOTE
     INDEX_MAX = INDEX_MAX
