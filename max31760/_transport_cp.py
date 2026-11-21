@@ -22,7 +22,7 @@ _SCAN_MIN = 0x03         # conventional i2cdetect candidate range
 _SCAN_MAX = 0x77
 
 
-class _SmbusCompat(object):
+class _SmbusCompat:
     """Normalizes legacy smbus to the smbus2 block-read contract.
 
     Legacy smbus read_i2c_block_data(addr, cmd) takes no length argument and
@@ -35,6 +35,9 @@ class _SmbusCompat(object):
 
     def read_i2c_block_data(self, addr, reg, qty):
         data = self._bus.read_i2c_block_data(addr, reg)
+        if len(data) < qty + 1:
+            raise OSError("legacy smbus returned %d byte(s) for %d "
+                          "requested (count byte + payload)" % (len(data), qty))
         return list(data[1:qty + 1])  # drop count byte, keep payload
 
     def write_i2c_block_data(self, addr, reg, data):
@@ -60,7 +63,7 @@ def _open_smbus(bus):
         return _SmbusCompat(_mod.SMBus(int(bus)))
 
 
-class TransportCP(object):
+class TransportCP:
     """Adapts an SMBus handle to the transport contract.
 
     Args:

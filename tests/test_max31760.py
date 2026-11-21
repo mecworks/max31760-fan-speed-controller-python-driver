@@ -42,9 +42,9 @@ from max31760._core import (
     PWM_FREQ_33HZ, PWM_FREQ_150HZ, PWM_FREQ_1P5KHZ, PWM_FREQ_25KHZ,
     SR_ALARM_MASK, MASK_RESERVED_HI,
     EEX_SAVE_ALL, EEX_LOAD_ALL, EEX_ALL_BLOCKS,
-    FACTORY_DEFAULTS, IDEALITY_TABLE, TACH_REF_HZ,
+    FACTORY_DEFAULTS, IDEALITY_TABLE, TACH_REF_HZ, POR_SETTLE_MS,
 )
-from max31760._transport_cp import TransportCP
+from max31760._transport_cp import TransportCP, _SmbusCompat
 from max31760._lut import lut_index_for_temp, build_lut_curve
 import max31760._regs as regs_mod
 
@@ -113,6 +113,7 @@ class TestConstants(unittest.TestCase):
         self.assertEqual(EEX_LOAD_ALL, 0x9F)
         self.assertEqual(SR_ALARM_MASK, 0x7F)
         self.assertEqual(MASK_RESERVED_HI, 0xC0)
+        self.assertEqual(POR_SETTLE_MS, 2000)
 
 
 class TestTempMath(unittest.TestCase):
@@ -1392,6 +1393,75 @@ class TestApiParity(unittest.TestCase):
                                  "signature mismatch: %s" % name)
             else:
                 self.assertEqual(m, c, "constant mismatch: %s" % name)
+
+
+class TestContextManager(unittest.TestCase):
+    """M2: MAX31760 supports the with-statement (Item 66)."""
+
+    def test_enter_returns_self(self):
+        dev = MAX31760(MockTransport(MockChip()))
+        self.assertIs(dev.__enter__(), dev)
+
+    def test_exit_calls_close_and_never_suppresses(self):
+        dev = MAX31760(MockTransport(MockChip()))
+        calls = []
+        dev.close = lambda: calls.append("close")
+        try:
+            with dev:
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+        else:
+            self.fail("exception was suppressed by __exit__")
+        self.assertEqual(calls, ["close"])
+
+    def test_borrowed_handle_not_closed(self):
+        from max31760.cp import MAX31760 as CPDev
+        bus = FakeSMBus(1)
+        dev = CPDev(handle=bus, addr=0x50)
+        with dev:
+            self.assertTrue(dev.verify())
+        self.assertFalse(bus.closed,
+                         "injected handle must not be closed by the driver")
+
+    def test_mp_facade_with_statement(self):
+        from max31760.mp import MAX31760 as MPDev
+        class DummyI2C(object):
+            def readfrom_mem(self, *a):
+                return b"\x00"
+            def writeto_mem(self, *a):
+                pass
+        dev = MPDev(DummyI2C(), addr=0x50)
+        with dev as d:
+            self.assertIs(d, dev)
+        # close() is a documented no-op on MicroPython; no exception expected
+
+
+class TestRepr(unittest.TestCase):
+    def test_repr_shows_address(self):
+        dev = MAX31760(MockTransport(MockChip()), addr=0x50)
+        self.assertEqual(repr(dev), "<MAX31760 addr=0x50>")
+        dev2 = MAX31760(MockTransport(MockChip()), addr=0x57)
+        self.assertEqual(repr(dev2), "<MAX31760 addr=0x57>")
+
+
+class TestSmbusCompatContract(unittest.TestCase):
+    """M2: legacy-smbus adapter fails loudly on short payloads."""
+
+    def test_short_payload_raises_oserror(self):
+        class ShortBus(object):
+            def read_i2c_block_data(self, addr, reg):
+                return [1, 0xAA]  # count byte + only 1 payload byte
+        compat = _SmbusCompat(ShortBus())
+        self.assertRaises(OSError, compat.read_i2c_block_data, 0x50, 0x00, 4)
+
+    def test_normalization_unchanged(self):
+        class OkBus(object):
+            def read_i2c_block_data(self, addr, reg):
+                return [4, 0x11, 0x22, 0x33, 0x44]
+        compat = _SmbusCompat(OkBus())
+        self.assertEqual(compat.read_i2c_block_data(0x50, 0x00, 4),
+                         [0x11, 0x22, 0x33, 0x44])
 
 
 class TestRegsModule(unittest.TestCase):

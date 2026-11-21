@@ -17,7 +17,7 @@ class MAX31760(_Core):
     """MAX31760 driver bound to a Linux SMBus/I2C bus."""
 
     def __init__(self, bus=1, addr=0x50, handle=None):
-        super(MAX31760, self).__init__(TransportCP(bus, addr, handle), addr)
+        super().__init__(TransportCP(bus, addr, handle), addr)
 
     def close(self):
         """Release the underlying bus (only if this object opened it)."""

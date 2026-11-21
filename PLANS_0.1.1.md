@@ -41,7 +41,7 @@ result from v0.1.0.
 - [x] (2026-11-21) User review complete: D-04 (primary property/verb variant) and D-10 APPROVED; branch name fixed to `v0.1.1-refactor` (no `chatbox/` prefix); D-15 adopted (no backwards compatibility, no deprecation warnings — pre-1.0 release); hardware strategy set: Pico W performs ALL initial on-hardware testing, ESP32-S3 and RPi 3A+ legs deferred until Pico work + testing is complete.
 - [x] (2026-11-21) Go-ahead received; execution started (M0). Execution directives: no co-author trailers; merge after all platforms validated; RPi 3A+ at `marc@192.168.1.225` (SSH keys); single MAX31760 chip relocated between benches (sequential validation).
 - [x] (2026-11-21) M0 COMPLETE: branch `v0.1.1-refactor` created from `main` @ 09f2db5; plan doc committed (ef8e4c9, incl. `.gitignore` pattern fix); all four host gates re-confirmed green ON THE BRANCH (transcript in Artifacts and Notes); RPi 3A+ key-auth probe OK (hostname `fanspeedcontroller`, Python 3.13.5, `~/max31760-test/` pre-populated with the v0.1.0 deployment).
-- [ ] M1: deduplicate register constants; extract leaf module `max31760/_regs.py`; remove mid-file circular import.
+- [x] (2026-11-21) M1 COMPLETE (commit a186994): `max31760/_regs.py` created as leaf module (zero package imports); `_core.py` shrunk by ~270 lines (constants region + six helpers moved out; NOTE comment and mid-file `from ._faults import FaultMixin` deleted, import moved to top); `_faults.py`/`_lut.py` now import from `_regs`; lint gate covers 8 files; new `TestRegsModule` (4 tests). Gates green: **138 tests OK** (134 baseline UNMODIFIED + 4 new — proves zero value drift), api-coverage PASS (124 members), lint PASS ×8, compileall clean; import-order independence verified (`import max31760._faults` and `import max31760._lut` directly now succeed without importing `_core` first).
 - [ ] M2: quick structural wins — context manager, `__repr__`, zero-arg `super()`, drop `(object)` bases, `_SmbusCompat` payload-length assert, named `POR_SETTLE_MS` constant.
 - [ ] M3: behavior fixes — `measure_tach_once` raises `TimeoutError` on unchanged count; `get_pwm_freq_hz` raises on unknown DRV combo; keyword-only fences on timeout parameters.
 - [ ] M4: honest package facade — root `__all__`, extended mp/cp `__all__`, fix the lying export comment.
@@ -639,6 +639,24 @@ M0 transcript (captured 2026-11-21 on branch `v0.1.1-refactor`, commit ef8e4c9):
     fanspeedcontroller
     Python 3.13.5
     # ~/max31760-test/ already holds the v0.1.0 deployment (package + both E2E suites + rpi_* scripts)
+
+M1 transcript (captured 2026-11-21, commit a186994):
+
+    $ python -m unittest discover tests
+    Ran 138 tests in 2.150s
+    OK
+    $ python tools/api_coverage.py
+    public members: 124
+    RESULT: PASS (all public members referenced by the suite)
+    $ python tests/lint_subset.py
+    max31760/_regs.py : CLEAN   (+ 7 more, all CLEAN)
+    RESULT: PASS
+    $ python -m compileall -q max31760
+    (no output, exit 0)
+    $ python -c "import max31760.mp; import max31760.cp"
+    facade-import-ok
+    $ python -c "import max31760._faults" ; python -c "import max31760._lut"
+    faults-direct-ok / lut-direct-ok   (previously required _core imported first)
 
 (Milestone transcripts — gate outputs, red→green demonstrations, Pico W probe and E2E
 matrix results, merge/tag records — are appended here as each milestone lands.)

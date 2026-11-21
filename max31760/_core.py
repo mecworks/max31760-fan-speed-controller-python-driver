@@ -100,6 +100,27 @@ class MAX31760(FaultMixin):
         self._t = transport
         self._addr = a
 
+    # -- resource handling ---------------------------------------------------
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False  # never suppress exceptions
+
+    def __repr__(self):
+        return "<MAX31760 addr=0x%02X>" % self._addr
+
+    def close(self):
+        """Release resources held by this device object.
+
+        No-op on the shared core (the transport contract makes close()
+        optional); overridden by the platform facades (cp releases the
+        bus it opened; mp is a documented no-op).
+        """
+        pass
+
     # -- low-level plumbing (internal) -------------------------------------
 
     def _tx(self, fn):
@@ -750,7 +771,7 @@ class MAX31760(FaultMixin):
             waited += 10
         if not self._t.probe():
             raise OSError("device not responding after soft POR")
-        self._wait_eeprom_ready(2000)
+        self._wait_eeprom_ready(POR_SETTLE_MS)
 
     def enter_standby(self):
         """Enter standby mode (CR2.STBY): sensing/PWM off, I2C stays active."""

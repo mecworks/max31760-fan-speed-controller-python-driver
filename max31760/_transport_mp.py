@@ -8,7 +8,7 @@ NOTE: mem_read/mem_write are NOT part of the standard MicroPython API
 import time
 
 
-class TransportMP(object):
+class TransportMP:
     """Adapts a caller-constructed machine.I2C object to the transport contract.
 
     Contract consumed by _core.MAX31760:

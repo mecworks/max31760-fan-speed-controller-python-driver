@@ -18,7 +18,7 @@ class MAX31760(_Core):
     """MAX31760 driver bound to a MicroPython machine.I2C instance."""
 
     def __init__(self, i2c, addr=0x50):
-        super(MAX31760, self).__init__(TransportMP(i2c, addr), addr)
+        super().__init__(TransportMP(i2c, addr), addr)
 
     def close(self):
         """No-op on MicroPython (the garbage collector owns the bus);

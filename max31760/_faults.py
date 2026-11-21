@@ -15,7 +15,7 @@ from ._regs import (
 )
 
 
-class FaultMixin(object):
+class FaultMixin:
     """Fault/status/alert-mask/fan-sense methods mixed into MAX31760."""
 
     # -- status (F16) ----------------------------------------------------------
