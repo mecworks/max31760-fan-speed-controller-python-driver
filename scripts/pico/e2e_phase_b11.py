@@ -28,11 +28,11 @@ print("factory CR1=%02X CR2=%02X CR3=%02X" % (cr1_0, cr2_0, cr3_0))
 # Manual-duty assertions below require manual_enable(True).
 # Also force the immediate ramp so duty transitions are prompt (restored
 # at the end); the presets themselves do not touch the ramp rate.
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 
 # --- preset 1: 4-wire fan -------------------------------------------------------
 dev.configure_4wire_fan(port=1)
-dev.manual_enable(True)
+dev.manual = True
 cr1 = dev.read_reg(0x00, 1)[0]
 cr3 = dev.read_reg(0x02, 1)[0]
 print("4wire preset: CR1=%02X CR3=%02X" % (cr1, cr3))
@@ -40,19 +40,19 @@ assert cr1 & 0x18 == 0x18, "25 kHz not selected"
 assert cr3 & 0x01 and not (cr3 & 0x02), "TACH1/TACH2 bits wrong"
 time.sleep_ms(200)
 dev.set_duty_pct(50.0)
-pv = dev.get_actual_duty_raw()
+pv = dev.actual_duty_raw
 for i in range(10):
     if 120 <= pv <= 136:
         break
     time.sleep_ms(200)
-    pv = dev.get_actual_duty_raw()
+    pv = dev.actual_duty_raw
 rpm_half = dev.rpm(1)
 print("4wire @50%%: PWMV=%d, rpm=%.1f (after %d x 200 ms settle)" %
       (pv, rpm_half, i + 1))
 if not (120 <= pv <= 136):
     print("DIAG: SR=%02X CR2=%02X CR3=%02X FFDC=%02X" %
           (dev.status_raw(), dev.read_reg(0x01, 1)[0],
-           dev.read_reg(0x02, 1)[0], dev.get_ffdc_raw()))
+           dev.read_reg(0x02, 1)[0], dev.ff_dc_raw))
 assert 120 <= pv <= 136, "PWMV off target at 50 %% (%d)" % pv
 # Causality check: raising the duty must raise the fan speed
 # (a real 4-wire fan at 50 % duty spins well below its full speed).
@@ -66,7 +66,7 @@ print("configure_4wire_fan: OK")
 
 # --- preset 2: 3-wire supply modulation ------------------------------------------
 dev.configure_3wire_supply_modulation(port=1)
-dev.manual_enable(True)
+dev.manual = True
 cr1 = dev.read_reg(0x00, 1)[0]
 cr3 = dev.read_reg(0x02, 1)[0]
 print("3wire preset: CR1=%02X CR3=%02X" % (cr1, cr3))

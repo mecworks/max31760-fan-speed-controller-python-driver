@@ -16,7 +16,7 @@ dev = MAX31760(i2c, addr=0x50)
 assert dev.verify(), "verify() failed"
 
 # Factory state
-factory = dev.lut_get()
+factory = dev.lut
 assert len(factory) == 48 and all(v == 0xFF for v in factory), "LUT not factory"
 print("factory LUT: 48 x FF")
 
@@ -31,8 +31,8 @@ print("curve[%d] (t~%.0fC) = %d (%.1f%%)"
 assert 0 < exp < 255, "curve degenerate"
 
 # Bulk round-trip (48 bytes => six page-aligned wire writes)
-dev.lut_set(curve)
-got = dev.lut_get()
+dev.lut = curve
+got = dev.lut
 assert got == list(curve), "bulk LUT round-trip mismatch"
 print("bulk round-trip: OK")
 
@@ -43,8 +43,8 @@ assert dev.lut_get_index(21) == curve[21], "neighbour disturbed"
 print("single-entry: OK")
 
 # Restore factory LUT
-dev.lut_set([0xFF] * 48)
-assert all(v == 0xFF for v in dev.lut_get()), "restore failed"
+dev.lut = [0xFF] * 48
+assert all(v == 0xFF for v in dev.lut), "restore failed"
 print("restored factory LUT")
 
 print("PHASE-B3 DEVICE E2E: PASS")

@@ -38,7 +38,7 @@ assert dev.user_memory_get(7) == 0x77
 print("user memory: OK")
 
 # --- save_config: RAM -> EEPROM, ack-polled ---------------------------------------
-dev.set_pwm_freq_hz(150)                     # mutate CR1.DRV
+dev.pwm_freq_hz = 150                     # mutate CR1.DRV
 dev.write_reg(0x20, bytes([0x80]))           # mutate LUT[0]
 t0 = time.ticks_ms()
 dev.save_config()                            # all blocks
@@ -64,7 +64,7 @@ print("eeprom save + POR persistence: OK")
 for base in BLOCKS:
     dev.write_reg(base, snap[base])          # page-aligned 16-byte chunks
 dev.save_config()
-dev.set_pwm_freq_hz(25000)                   # RAM diverges from EEPROM again
+dev.pwm_freq_hz = 25000                   # RAM diverges from EEPROM again
 assert dev.read_reg(0x00, 1)[0] & 0x18 == 0x18
 dev.load_config(MAX31760.EEX_BLOCK_00_0F)    # pull control block back from EEPROM
 cr1_l = dev.read_reg(0x00, 1)[0]
@@ -73,13 +73,13 @@ assert cr1_l == cr1_0, "load_config did not restore CR1 from EEPROM"
 print("load_config overwrite: OK")
 
 # --- standby enter/exit ------------------------------------------------------------
-assert not dev.standby_active()
-dev.enter_standby()
-assert dev.standby_active()
+assert not dev.standby
+dev.standby = True
+assert dev.standby
 cr2_s = dev.read_reg(0x01, 1)[0]             # I2C must stay responsive
 assert cr2_s & 0x80, "STBY bit not visible while in standby"
-dev.exit_standby()
-assert not dev.standby_active()
+dev.standby = False
+assert not dev.standby
 print("standby: OK (I2C responsive while in standby)")
 
 # --- final POR: verify the whole configuration matches the pre-test snapshot ------

@@ -121,11 +121,11 @@ print("local  %.1f C" % dev.local_temp_c)
 print("remote %.1f C" % dev.remote_temp_c)
 
 # Drive the fan directly (manual mode):
-dev.manual_enable(True)
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.manual = True
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 dev.set_duty_pct(50.0)
 dev.wait_for_duty(50.0)
-print("actual duty: %d/255" % dev.get_actual_duty_raw())
+print("actual duty: %d/255" % dev.actual_duty_raw)
 print("fan speed:   %.1f rpm" % dev.rpm(1))
 ```
 
@@ -137,7 +137,7 @@ from max31760.cp import MAX31760
 dev = MAX31760(bus=1, addr=0x50)     # /dev/i2c-1
 assert dev.verify()
 dev.configure_4wire_fan(port=1)      # recommended 25 kHz preset
-dev.manual_enable(True)
+dev.manual = True
 dev.set_duty_pct(75.0)
 print(dev.rpm(1))
 dev.close()                          # releases the bus if this object opened it
@@ -150,12 +150,12 @@ dev.close()                          # releases the bus if this object opened it
 1. **Control mode (CR2.DFC).** The factory default is *automatic LUT mode*:
    the output follows the temperature-indexed lookup table, and writes to the
    manual duty register (PWMR) are IGNORED. With the factory all-FF LUT the
-   fan runs at 100 %. Call `manual_enable(True)` before using
-   `set_duty_pct()`/`set_duty_raw()`. Conversely, in LUT mode program the LUT
-   (`lut_set`/`lut_set_index`) and leave DFC cleared.
+   fan runs at 100 %. Assign `dev.manual = True` before using
+   `set_duty_pct()`/`duty_cmd_raw`. Conversely, in LUT mode program the LUT
+   (`lut` / `lut_set_index`) and leave DFC cleared.
 2. **Single-fan hygiene (mandatory).** If only one fan is connected, disable
    the unused tachometer and clear any latched fan-fail alarm:
-   `tach2_enable(False)` + `clear_fan_fail()`. A dead/disabled-but-monitored
+   `dev.tach2_enabled = False` + `clear_fan_fail()`. A dead/disabled-but-monitored
    port latches TACH2A after ~3 detection cycles (~8 s measured), which forces
    the PWM output to the FFDC value (factory 100 %) and overrides even manual
    duty. The presets in §5.10 do this for you.
@@ -172,8 +172,16 @@ dev.close()                          # releases the bus if this object opened it
 
 ## 5. API reference
 
-All methods exist identically on both facades (enforced by the parity gate,
+All members exist identically on both facades (enforced by the parity gate,
 §8). Signatures below are the shared-core ones.
+
+**Convention (0.1.1):** register-backed STATE is exposed as PROPERTIES —
+reading or assigning one performs an I2C transaction. VERBS are reserved for
+ACTIONS (`save_config()`, `configure_4wire_fan()`, ...) and for destructive-
+read primitives whose latch-consuming side effect must be visible at the call
+site (`status_raw()`, `active_alarms()`, ...). Percent-convenience writers
+(`set_duty_pct()`, `set_ffdc_pct()`) stay verbs because they convert units;
+the properties hold raw values.
 
 ### 5.1 Identity & raw access
 
@@ -191,33 +199,31 @@ All methods exist identically on both facades (enforced by the parity gate,
 |--------|-------------|
 | `local_temp_c` (property) | Local die temperature, °C float. |
 | `remote_temp_c` (property) | Remote diode temperature, °C float. |
-| `set_local_high(celsius)` / `get_local_high()` | Local high-threshold setpoint (LTH/LTL). |
-| `set_local_overtemp(celsius)` / `get_local_overtemp()` | Local over-temp shutdown threshold. |
-| `set_remote_high(celsius)` / `get_remote_high()` | Remote high-threshold setpoint. |
-| `set_remote_overtemp(celsius)` / `get_remote_overtemp()` | Remote over-temp threshold. |
-| `set_hysteresis_c(celsius)` / `get_hysteresis_c()` | Threshold hysteresis (CR1.HYST). |
-| `set_index_source(source)` / `get_index_source()` | Which sensor indexes the LUT: `INDEX_LOCAL`, `INDEX_REMOTE`, `INDEX_MAX`. |
+| `local_high_c` (property) | Local high-threshold setpoint (LTH/LTL), °C; assign to write. |
+| `local_overtemp_c` (property) | Local over-temp shutdown threshold, °C. |
+| `remote_high_c` (property) | Remote high-threshold setpoint, °C. |
+| `remote_overtemp_c` (property) | Remote over-temp threshold, °C. |
+| `hysteresis_c` (property) | Threshold hysteresis (CR1.HYST); 2 or 4 only. |
+| `index_source` (property) | Which sensor indexes the LUT: `INDEX_LOCAL`, `INDEX_REMOTE`, `INDEX_MAX`. |
 
 ### 5.3 Manual (direct) control & duty
 
 | Method | Description |
 |--------|-------------|
-| `manual_enable(on)` / `manual_enabled()` | CR2.DFC — direct fan control vs automatic LUT mode. |
+| `manual` (property) | CR2.DFC — direct fan control vs automatic LUT mode; assign True/False. |
 | `set_duty_pct(pct)` | Command duty 0..100 % (writes PWMR). |
-| `set_duty_raw(raw)` | Command duty 0..255. |
-| `get_duty_cmd_raw()` | Last commanded duty (PWMR). |
-| `get_actual_duty_raw()` / `get_actual_duty_pct()` | Actual output duty (PWMV, RO). |
-| `set_ramp_rate(rate)` / `get_ramp_rate()` | `RAMP_SLOW` / `RAMP_MED_SLOW` / `RAMP_MED_FAST` / `RAMP_IMMEDIATE`. |
+| `duty_cmd_raw` (property) | Commanded duty 0..255 (PWMR); assign to write. |
+| `actual_duty_raw` / `actual_duty_pct` (RO properties) | Actual output duty (PWMV). |
+| `ramp_rate` (property) | `RAMP_SLOW` / `RAMP_MED_SLOW` / `RAMP_MED_FAST` / `RAMP_IMMEDIATE`. |
 | `wait_for_duty(target_pct, timeout_ms=2000)` | Block until actual duty reaches target ±1 LSB; `TimeoutError` on overrun. |
-| `set_pwm_freq_hz(hz)` / `get_pwm_freq_hz()` | One of `PWM_FREQ_33HZ`, `PWM_FREQ_150HZ`, `PWM_FREQ_1P5KHZ`, `PWM_FREQ_25KHZ`. |
-| `set_pwm_polarity(polarity)` / `get_pwm_polarity()` | `POLARITY_POSITIVE` / `POLARITY_NEGATIVE`. |
+| `pwm_freq_hz` (property) | One of `PWM_FREQ_33HZ`, `PWM_FREQ_150HZ`, `PWM_FREQ_1P5KHZ`, `PWM_FREQ_25KHZ`; raises `ValueError` on an unsupported value. |
+| `pwm_polarity` (property) | `POLARITY_POSITIVE` / `POLARITY_NEGATIVE`. |
 
 ### 5.4 Lookup table (automatic mode)
 
 | Method | Description |
 |--------|-------------|
-| `lut_get()` | All 48 LUT entries as a tuple of raw duties. Window geometry (datasheet Table 7): window 0 covers < 18 °C, each further window spans 2 °C, window 47 saturates ≥ 110 °C. |
-| `lut_set(duties)` | Program all 48 entries (sequence of 0..255). |
+| `lut` (property) | All 48 LUT entries as a list of raw duties; assign a 48-int sequence to program the whole curve. Window geometry (datasheet Table 7): window 0 covers < 18 °C, each further window spans 2 °C, window 47 saturates ≥ 110 °C. |
 | `lut_get_index(index)` / `lut_set_index(index, duty)` | Single-entry access (index 0..47). |
 | `build_lut_curve(points)` / `lut_index_for_temp(temp)` | Module-level helpers exported by both facades: build a 48-entry LUT from `(temp_c, pct)` breakpoints; map a temperature to its LUT window index. |
 
@@ -225,11 +231,11 @@ All methods exist identically on both facades (enforced by the parity gate,
 
 | Method | Description |
 |--------|-------------|
-| `tach1_enable(on)` / `tach1_enabled()` | Arm/disarm port-1 tachometer (CR3.TACH1E). |
-| `tach2_enable(on)` / `tach2_enabled()` | Same for port 2 (CR3.TACH2E). |
+| `tach1_enabled` (property) | Arm/disarm port-1 tachometer (CR3.TACH1E); assign True/False. |
+| `tach2_enabled` (property) | Same for port 2 (CR3.TACH2E). |
 | `rpm(port, pulses_per_rev=2)` | Instantaneous RPM from the TC counter pair; 0.0 when no count. |
 | `measure_tach_once(port=1, timeout_ms=3000)` | One-shot pulse-stretched measurement (sets PSEN, polls TC, always clears PSEN). Requires 33 Hz + TACHFULL off. |
-| `set_tach_threshold(count)` / `get_tach_threshold()` | Fan-fail tach threshold (TCTH:TCTL, 0..65535). |
+| `tach_threshold` (property) | Fan-fail tach threshold (TCTH:TCTL, 0..65535); assign to set. |
 
 ### 5.6 Fault handling
 
@@ -239,11 +245,12 @@ All methods exist identically on both facades (enforced by the parity gate,
 | `active_alarms()` | Compact six-alarm bitmask (SR & SR_ALARM_MASK, PC excluded). Consumes the latch like `status_raw()` — call one or the other per service cycle. |
 | `remote_diode_fault()` | True if SR.RDFA (remote diode fault). |
 | `clear_fan_fail()` | Pulse CR3.CLRFAIL (self-clearing). |
-| `set_ffdc_raw(raw)` / `set_ffdc_pct(pct)` / `get_ffdc_raw()` | Forced duty applied while a fan-fail condition holds. |
-| `set_ff_zero_detection(on)` / `ff_zero_detection()` | CR3.FF_0 — treat zero tach count as failure. |
-| `set_ff_mode(mode)` / `get_ff_mode()` | `FF_MODE_INTERRUPT` (latched) or `FF_MODE_COMPARATOR` (live). |
-| `set_rd_mode(enabled)` / `rd_mode_enabled()` | CR3.FSST — locked-rotor (RD) sensing instead of tach counting. |
-| `set_rd_polarity(high_means_spinning)` / `get_rd_polarity()` | CR3.RDPS — RD signal polarity. |
+| `ff_dc_raw` (property) | Forced duty applied while a fan-fail condition holds; assign to set. |
+| `set_ffdc_pct(pct)` | Same, from a percent 0..100. |
+| `ff_zero_detection` (property) | CR3.FF_0 — treat zero tach count as failure; assign True/False. |
+| `ff_mode` (property) | `FF_MODE_INTERRUPT` (latched) or `FF_MODE_COMPARATOR` (live). |
+| `rd_mode` (property) | CR2.FSST — locked-rotor (RD) sensing instead of tach counting; assign True/False. |
+| `rd_polarity` (property) | CR2.RDPS — RD signal polarity (True = high means spinning). |
 
 Status flag constants: `SR_TACH1A`, `SR_TACH2A`, `SR_ROTA`, `SR_RHA`,
 `SR_LOTA`, `SR_LHA`, `SR_RDFA`, `SR_PC`, plus `SR_ALARM_MASK` (all six
@@ -253,13 +260,13 @@ alarm bits) and `SR_ALARM_MASK`-based helpers.
 
 | Method | Description |
 |--------|-------------|
-| `set_alert_mask(alarms)` / `get_alert_mask()` | MASK register (0x04): which alarms drive ALERT. |
+| `alert_mask` (property) | MASK register (0x04): which alarms drive ALERT; assign a bitmask to change. |
 | `alert_masked()` | True if CR1.ALTMSK is latched (post-service masking active). |
 | `service_alert()` | Read SR (datasheet step 2) and return it. |
 | `clear_alert_mask()` | Clear ALTMSK (datasheet step 5). |
-| `set_alert_mode(mode)` / `get_alert_mode()` | `ALERT_MODE_INTERRUPT` (latched, factory) or `ALERT_MODE_FAULT_INDICATOR` (tracks live condition). |
-| `set_ideality_factor_index(idx)` / `get_ideality_factor_index()` | IFR index 0..63 (CR2 bits [5:0]). |
-| `get_ideality_factor()` | Float n for the current index (from `IDEALITY_TABLE`). |
+| `alert_mode` (property) | `ALERT_MODE_INTERRUPT` (latched, factory) or `ALERT_MODE_FAULT_INDICATOR` (tracks live condition). |
+| `ideality_factor_index` (property) | IFR index 0..63 (IFR bits [5:0]); assign to change. |
+| `ideality_factor` (RO property) | Float n for the current index (from `IDEALITY_TABLE`). |
 | `set_ideality_factor(n)` | Nearest-table match; returns the chosen index; rejects out-of-range. |
 
 `IDEALITY_TABLE` (64 floats, 0.9844..1.0489) is exposed as a class attribute.
@@ -273,7 +280,7 @@ alarm bits) and `SR_ALARM_MASK`-based helpers.
 | `eeprom_corrupt()` | True if SR.PC (persists across SR reads). |
 | `recover_from_corruption(timeout_ms=2000)` | Rewrite all blocks → soft POR → verify PC cleared. |
 | `soft_por(settle_ms=1000)` | CR1.SW_POR self-clearing reset; RAM reloads from EEPROM. The chip resets mid-transaction, so the SW_POR write is issued exactly once (no retries) and its expected bus error is swallowed; the method then polls until the device re-acknowledges (up to `settle_ms`) and waits out the POR-triggered EEPROM-reload window. Raises `OSError` only if the device never comes back. |
-| `enter_standby()` / `exit_standby()` / `standby_active()` | CR2.STBY (I²C stays alive in standby). |
+| `standby` (property) | CR2.STBY (I²C stays alive in standby); assign True to enter, False to exit. |
 | `user_memory_get(index=0)` / `user_memory_set(index, value)` | User memory bytes 0x10..0x17 (index 0..7). |
 | `user_memory_read_all()` / `user_memory_write_all(data)` | Bulk variants (8 bytes). |
 
@@ -284,9 +291,9 @@ Block-select constants: `EEX_BLOCK_00_0F` … `EEX_BLOCK_40_4F`,
 
 | Method | Description |
 |--------|-------------|
-| `spin_up_enable(on)` / `spin_up_enabled()` | CR2.SPEN — hold ~100 % briefly to help the fan start. |
-| `pulse_stretch_enable(on)` / `pulse_stretch_enabled()` | CR3.PSEN — stretch tach pulses so they survive 33 Hz supply chopping. |
-| `tacho_full_enable(on)` / `tacho_full_enabled()` | CR3.TACHFULL — suspend tach measurement below 100 % duty. |
+| `spin_up_enabled` (property) | CR2.SPEN — hold ~100 % briefly to help the fan start; assign True/False. |
+| `pulse_stretch_enabled` (property) | CR3.PSEN — stretch tach pulses so they survive 33 Hz supply chopping. |
+| `tacho_full_enabled` (property) | CR3.TACHFULL — suspend tach measurement below 100 % duty. |
 
 ### 5.10 Presets
 
@@ -297,7 +304,7 @@ Block-select constants: `EEX_BLOCK_00_0F` … `EEX_BLOCK_40_4F`,
 | `configure_two_fans(pwm_freq_hz=PWM_FREQ_25KHZ)` | Both tachometers armed for dual-fan operation. |
 
 Presets are **mode-neutral**: they never touch CR2.DFC. If you intend to drive
-the output with `set_duty_pct()`, call `manual_enable(True)` yourself (in
+the output with `set_duty_pct()`, assign `dev.manual = True` yourself (in
 automatic mode the LUT governs — see §4.1).
 
 ### 5.11 Lifecycle
@@ -376,7 +383,7 @@ logged in `SUMMARY.md`.
 
 ## 9. Example: ALERT interrupt service routine
 
-With `set_alert_mode(ALERT_MODE_INTERRUPT)` (factory) the ALERT pin goes low
+With `alert_mode = ALERT_MODE_INTERRUPT` (factory) the ALERT pin goes low
 when a masked alarm latches. Service it like this:
 
 ```python
@@ -392,7 +399,7 @@ def isr(pin):                       # wired to the ALERT pin (IRQ_FALLING)
     # attend the condition, then release the mask:
     dev.clear_alert_mask()          # step 5
 
-dev.set_alert_mask(MAX31760.SR_ALARM_MASK & ~MAX31760.SR_RDFA)
+dev.alert_mask = MAX31760.SR_ALARM_MASK & ~MAX31760.SR_RDFA
 irq_pin.irq(handler=isr, trigger=machine.Pin.IRQ_FALLING)
 ```
 

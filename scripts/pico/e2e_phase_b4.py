@@ -36,57 +36,57 @@ dev.write_reg(0x02, bytes([cr3_prep]))
 dev.write_reg(0x02, bytes([cr3_prep | 0x80]))   # CLRFAIL (self-clearing)
 print("prep: TACH2 disabled, fan-fail cleared")
 
-assert not dev.manual_enabled(), "DFC unexpectedly set"
-start_pwmv = dev.get_actual_duty_raw()
+assert not dev.manual, "DFC unexpectedly set"
+start_pwmv = dev.actual_duty_raw
 print("auto-mode PWMV start=%d" % start_pwmv)
 assert start_pwmv == 255, "expected 100%% in auto mode (LUT all FF)"
 
 # Manual mode: command 50 %, watch the ACTUAL output follow
-dev.manual_enable(True)
-assert dev.manual_enabled()
+dev.manual = True
+assert dev.manual
 dev.set_duty_pct(50.0)
-assert dev.get_duty_cmd_raw() == 128, "PWMR command lost"
+assert dev.duty_cmd_raw == 128, "PWMR command lost"
 deadline = 0
-while dev.get_actual_duty_raw() != 128 and deadline < 60:
+while dev.actual_duty_raw != 128 and deadline < 60:
     time.sleep_ms(50)
     deadline += 1
-end_pwmv = dev.get_actual_duty_raw()
+end_pwmv = dev.actual_duty_raw
 print("manual 50%%: cmd=128 actual=%d (was %d)" % (end_pwmv, start_pwmv))
 assert end_pwmv == 128, "actual duty did not reach commanded value"
-assert abs(dev.get_actual_duty_pct() - 50.0) < 0.01
+assert abs(dev.actual_duty_pct - 50.0) < 0.01
 
 # Auto-mode configuration round-trips (restore factory each time)
-src = dev.get_index_source()
-dev.set_index_source(MAX31760.INDEX_MAX)
-assert dev.get_index_source() == MAX31760.INDEX_MAX
-dev.set_index_source(src)
-assert dev.get_index_source() == src
+src = dev.index_source
+dev.index_source = MAX31760.INDEX_MAX
+assert dev.index_source == MAX31760.INDEX_MAX
+dev.index_source = src
+assert dev.index_source == src
 print("index_source: OK")
 
-hys = dev.get_hysteresis_c()
-dev.set_hysteresis_c(4)
-assert dev.get_hysteresis_c() == 4
-dev.set_hysteresis_c(hys)
-assert dev.get_hysteresis_c() == hys
+hys = dev.hysteresis_c
+dev.hysteresis_c = 4
+assert dev.hysteresis_c == 4
+dev.hysteresis_c = hys
+assert dev.hysteresis_c == hys
 print("hysteresis: OK")
 
-freq = dev.get_pwm_freq_hz()
-dev.set_pwm_freq_hz(MAX31760.PWM_FREQ_25KHZ)
-assert dev.get_pwm_freq_hz() == MAX31760.PWM_FREQ_25KHZ
-dev.set_pwm_freq_hz(freq)
-assert dev.get_pwm_freq_hz() == freq
+freq = dev.pwm_freq_hz
+dev.pwm_freq_hz = MAX31760.PWM_FREQ_25KHZ
+assert dev.pwm_freq_hz == MAX31760.PWM_FREQ_25KHZ
+dev.pwm_freq_hz = freq
+assert dev.pwm_freq_hz == freq
 print("pwm_freq: OK")
 
-pol = dev.get_pwm_polarity()
-dev.set_pwm_polarity(MAX31760.POLARITY_NEGATIVE)
-assert dev.get_pwm_polarity() == MAX31760.POLARITY_NEGATIVE
-dev.set_pwm_polarity(pol)
-assert dev.get_pwm_polarity() == pol
+pol = dev.pwm_polarity
+dev.pwm_polarity = MAX31760.POLARITY_NEGATIVE
+assert dev.pwm_polarity == MAX31760.POLARITY_NEGATIVE
+dev.pwm_polarity = pol
+assert dev.pwm_polarity == pol
 print("polarity: OK")
 
 # Back to automatic mode; verify full factory-state restore
-dev.manual_enable(False)
-assert not dev.manual_enabled()
+dev.manual = False
+assert not dev.manual
 dev.write_reg(0x02, bytes([cr3_0]))
 assert dev.read_reg(0x00, 1)[0] == cr1_0, "CR1 not restored"
 assert dev.read_reg(0x01, 1)[0] == cr2_0, "CR2 not restored"

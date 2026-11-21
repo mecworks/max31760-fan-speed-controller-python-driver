@@ -35,10 +35,10 @@ print("CR1 after load: 0x%02X (expect sentinel 0x%02X)" %
 step("eeprom_corrupt", dev.eeprom_corrupt)
 step("soft_por", lambda: dev.soft_por())
 print("CR1 after POR: 0x%02X" % dev.read_reg(0x00, 1)[0])
-step("enter_standby", lambda: dev.enter_standby())
-step("standby_active", dev.standby_active)
+step("enter_standby", lambda: setattr(dev, "standby", True))
+step("standby", lambda: dev.standby)
 step("probe in standby", dev.probe)
-step("exit_standby", lambda: dev.exit_standby())
+step("exit_standby", lambda: setattr(dev, "standby", False))
 step("recover_from_corruption",
      lambda: dev.recover_from_corruption(timeout_ms=2000))
 step("eeprom_corrupt final", dev.eeprom_corrupt)

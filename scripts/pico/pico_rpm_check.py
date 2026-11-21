@@ -36,15 +36,15 @@ def ds_rpm(count):
     return 60.0 * REF_HZ / float(count) / float(PPR) if count else 0.0
 
 
-d.manual_enable(True)
-d.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+d.manual = True
+d.ramp_rate = MAX31760.RAMP_IMMEDIATE
 
 for pct in (25.0, 50.0, 75.0, 100.0):
     d.set_duty_pct(pct)
     assert d.wait_for_duty(pct, timeout_ms=1500), "duty stuck at %.0f" % pct
     settle = 5000 if pct == 100.0 else 2500      # extra settle at top end
     time.sleep_ms(settle)
-    pwmv = d.get_actual_duty_raw()
+    pwmv = d.actual_duty_raw
     samples = []
     for _ in range(5):                            # 5 period samples
         samples.append(tc1_count())

@@ -27,18 +27,18 @@ cr3_0 = dev.read_reg(0x02, 1)[0]
 assert cr3_0 == 0x03, "not factory state"
 
 # --- ideality factor observable effect ------------------------------------------
-ifr_idx_0 = dev.get_ideality_factor_index()
+ifr_idx_0 = dev.ideality_factor_index
 t0 = dev.remote_temp_c
 print("factory IFR idx=%d (n=%.4f), remote=%.3f C" %
-      (ifr_idx_0, dev.get_ideality_factor(), t0))
+      (ifr_idx_0, dev.ideality_factor, t0))
 idx = dev.set_ideality_factor(0.9844)      # farthest table entry => max shift
 time.sleep_ms(500)                         # allow a fresh conversion
 t1 = dev.remote_temp_c
-print("IFR idx=%d (n=%.4f), remote=%.3f C" % (idx, dev.get_ideality_factor(), t1))
+print("IFR idx=%d (n=%.4f), remote=%.3f C" % (idx, dev.ideality_factor, t1))
 assert idx == 0
 shift = t1 - t0
 assert shift > 0.25, "remote temp did not shift enough: %+0.3f C" % shift
-dev.set_ideality_factor_index(ifr_idx_0)   # restore factory
+dev.ideality_factor_index = ifr_idx_0   # restore factory
 # NOTE (measured): the bench diode reading settles slowly (~4 s) around an
 # IFR change (fixture thermal/electrical coupling); poll until it returns.
 t2 = dev.remote_temp_c
@@ -51,19 +51,19 @@ assert abs(t2 - t0) < 0.5, "factory IFR restore lost (%.3f vs %.3f)" % (t2, t0)
 print("ideality factor: OK (shift %+0.3f C, restored)" % shift)
 
 # --- alert mode round-trip --------------------------------------------------------
-assert dev.get_alert_mode() == MAX31760.ALERT_MODE_INTERRUPT   # factory
-dev.set_alert_mode(MAX31760.ALERT_MODE_FAULT_INDICATOR)
-assert dev.get_alert_mode() == MAX31760.ALERT_MODE_FAULT_INDICATOR
-dev.set_alert_mode(MAX31760.ALERT_MODE_INTERRUPT)
-assert dev.get_alert_mode() == MAX31760.ALERT_MODE_INTERRUPT
+assert dev.alert_mode == MAX31760.ALERT_MODE_INTERRUPT   # factory
+dev.alert_mode = MAX31760.ALERT_MODE_FAULT_INDICATOR
+assert dev.alert_mode == MAX31760.ALERT_MODE_FAULT_INDICATOR
+dev.alert_mode = MAX31760.ALERT_MODE_INTERRUPT
+assert dev.alert_mode == MAX31760.ALERT_MODE_INTERRUPT
 print("alert mode: OK")
 
 # --- full ALERT interrupt service sequence (datasheet steps 2/4/5) ----------------
-lhs_0 = dev.get_local_high()
+lhs_0 = dev.local_high_c
 ambient = dev.local_temp_c
 print("LHS=%.1f C, local die=%.1f C" % (lhs_0, ambient))
 assert ambient < lhs_0, "bench hotter than LHS already?"
-dev.set_local_high(ambient - 10.0)         # force LHA well below ambient
+dev.local_high_c = ambient - 10.0         # force LHA well below ambient
 
 sr = 0
 for i in range(40):                        # up to 20 s for LHA to latch
@@ -77,13 +77,13 @@ assert dev.alert_masked(), "device did not set ALTMSK after the SR read"
 print("ALTMSK latched by silicon: OK")
 
 # Step 4: attend to the condition
-dev.set_local_high(lhs_0)
+dev.local_high_c = lhs_0
 time.sleep_ms(1000)                        # let the alarm release
 
 # Step 5: unmask
 dev.clear_alert_mask()
 assert not dev.alert_masked(), "ALTMSK stuck after clear"
-assert dev.get_local_high() == lhs_0
+assert dev.local_high_c == lhs_0
 print("alert isr sequence: OK (steps 2/4/5 walked on real silicon)")
 
 # Final sanity: no residual alarms after restore

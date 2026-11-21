@@ -20,14 +20,14 @@ print("remote temp: %.1f C" % dev.remote_temp_c)
 
 # Recommended 4-wire topology preset, then manual control:
 dev.configure_4wire_fan(port=1)
-dev.manual_enable(True)
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.manual = True
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 
 for pct in (25.0, 50.0, 75.0, 100.0):
     dev.set_duty_pct(pct)
     dev.wait_for_duty(pct)
     print("duty %3.0f%% -> actual %3d/255, fan %.0f rpm" %
-          (pct, dev.get_actual_duty_raw(), dev.rpm(1)))
+          (pct, dev.actual_duty_raw, dev.rpm(1)))
 
 # Persist the current configuration to EEPROM:
 dev.save_config()

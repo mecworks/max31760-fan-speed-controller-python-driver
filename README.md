@@ -37,7 +37,7 @@ assert dev.verify()
 print(dev.local_temp_c, dev.remote_temp_c)
 
 dev.configure_4wire_fan(port=1)      # recommended preset
-dev.manual_enable(True)              # presets are mode-neutral (DFC untouched)
+dev.manual = True                    # presets are mode-neutral (DFC untouched)
 dev.set_duty_pct(50.0)
 dev.wait_for_duty(50.0)
 print(dev.rpm(1))

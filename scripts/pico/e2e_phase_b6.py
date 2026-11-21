@@ -37,19 +37,19 @@ assert abs(speed4 * 2.0 - speed) / speed < 0.05, "ppr scaling inconsistent"
 print("port1 rpm(ppr=4)=%.1f (half of ppr=2 as expected)" % speed4)
 
 # --- tach enable toggles ------------------------------------------------------
-assert dev.tach1_enabled() and dev.tach2_enabled()
-dev.tach1_enable(False)
-assert not dev.tach1_enabled() and dev.tach2_enabled()
-dev.tach1_enable(True)
-assert dev.tach1_enabled() and dev.tach2_enabled()
+assert dev.tach1_enabled and dev.tach2_enabled
+dev.tach1_enabled = False
+assert not dev.tach1_enabled and dev.tach2_enabled
+dev.tach1_enabled = True
+assert dev.tach1_enabled and dev.tach2_enabled
 print("tach1 toggle: OK")
 
 # --- TACH2 alarm observable effect (no fan on port 2) -------------------------
 # NOTE: SR lives at 0x5A (0x04 is the ALERT MASK register, factory C0h).
 sr_before = dev.read_reg(REG_SR, 1)[0]
-dev.tach2_enable(True)                        # already on; force fresh detection
+dev.tach2_enabled = True                        # already on; force fresh detection
 dev.write_reg(0x02, bytes([(cr3_0 & ~0x02) | 0x80]))  # CLRFAIL w/ TACH2 off
-dev.tach2_enable(True)
+dev.tach2_enabled = True
 # Datasheet: fan-error detection is DISABLED during the first 2 s after
 # (re)start; MEASURED on this bench (e2e_diag_latency.py): TACH2A re-latches
 # ~8 s after CLRFAIL + TACH2 re-enable (grace period + fault-queue cadence).
@@ -60,14 +60,14 @@ assert sr_after & 0x02, "TACH2A did not assert with no fan on port 2"
 print("tach2 alarm: OK")
 
 # --- 16-bit threshold round-trip ----------------------------------------------
-th_0 = dev.get_tach_threshold()
+th_0 = dev.tach_threshold
 assert th_0 == 0xFFFE, "factory threshold unexpected: %d" % th_0
 for val in (0, 40000, 65535):
-    dev.set_tach_threshold(val)
-    got = dev.get_tach_threshold()
+    dev.tach_threshold = val
+    got = dev.tach_threshold
     assert got == val, "threshold mismatch: wrote %d read %d" % (val, got)
-dev.set_tach_threshold(th_0)
-assert dev.get_tach_threshold() == th_0
+dev.tach_threshold = th_0
+assert dev.tach_threshold == th_0
 print("threshold round-trip: OK (factory %d restored)" % th_0)
 
 # Restore factory control state

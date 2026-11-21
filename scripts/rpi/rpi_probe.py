@@ -25,7 +25,7 @@ assert dev.verify(), "verify failed"
 lt = dev.local_temp_c
 rt = dev.remote_temp_c
 cr1 = dev.read_reg(0x00, 1)[0]
-pwmv = dev.get_actual_duty_raw()
+pwmv = dev.actual_duty_raw
 print("CR1          = 0x%02X" % cr1)
 print("local  temp  = %.1f C" % lt)
 print("remote temp  = %.1f C" % rt)

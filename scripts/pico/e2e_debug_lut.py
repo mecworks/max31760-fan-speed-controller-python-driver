@@ -7,8 +7,8 @@ dev = MAX31760(i2c, addr=0x50)
 
 curve = [min(255, int(i * 255 / 47.0)) for i in range(48)]
 print("curve[0..3]=%r ... [%d]=%d" % (curve[:4], 47, curve[47]))
-dev.lut_set(curve)
-got = list(dev.lut_get())
+dev.lut = curve
+got = list(dev.lut)
 print("bulk match:", got == curve)
 if got != curve:
     for i in range(48):

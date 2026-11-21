@@ -53,8 +53,13 @@ class FaultMixin:
         """
         self._cr3_rmw(CR3_CLRFAIL, CR3_CLRFAIL)
 
-    def set_ffdc_raw(self, raw):
-        """Set the fan-fail forced duty cycle (FFDC), raw 0..255."""
+    @property
+    def ff_dc_raw(self):
+        """Fan-fail forced duty cycle (FFDC), raw 0..255; assign to set."""
+        return self._burst_read(REG_FFDC, 1)[0]
+
+    @ff_dc_raw.setter
+    def ff_dc_raw(self, raw):
         d = int(raw)
         if d < 0 or d > 255:
             raise ValueError("FFDC %d out of range 0..255" % d)
@@ -64,73 +69,76 @@ class FaultMixin:
         """Set the fan-fail forced duty cycle (FFDC), percent 0..100."""
         self._burst_write(REG_FFDC, (pct_to_duty(pct),))
 
-    def get_ffdc_raw(self):
-        """Current fan-fail forced duty cycle (FFDC), raw 0..255."""
-        return self._burst_read(REG_FFDC, 1)[0]
-
-    def set_ff_zero_detection(self, on):
-        """Enable/disable fan-fail detection while PWM duty is zero (CR3.FF_0).
+    @property
+    def ff_zero_detection(self):
+        """Fan-fail detection while PWM duty is zero (CR3.FF_0);
+        assign True/False to toggle.
 
         Disable for fans that stop spinning at 0 % duty so an intentional stop
         is not reported as a failure.
         """
-        self._cr3_rmw(CR3_FF_0, CR3_FF_0 if on else 0)
-
-    def ff_zero_detection(self):
-        """True if fan-fail detection is active at zero duty (CR3.FF_0)."""
         return bool(self._burst_read(REG_CR3, 1)[0] & CR3_FF_0)
 
-    def set_ff_mode(self, mode):
-        """Select fan-fail output behaviour (CR2.FFMODE):
+    @ff_zero_detection.setter
+    def ff_zero_detection(self, on):
+        self._cr3_rmw(CR3_FF_0, CR3_FF_0 if on else 0)
+
+    @property
+    def ff_mode(self):
+        """Fan-fail output behaviour (CR2.FFMODE); assign to select:
         FF_MODE_INTERRUPT (latched until CLRFAIL) or FF_MODE_COMPARATOR
         (follows the live fault condition)."""
+        if self._burst_read(REG_CR2, 1)[0] & CR2_FFMODE:
+            return FF_MODE_COMPARATOR
+        return FF_MODE_INTERRUPT
+
+    @ff_mode.setter
+    def ff_mode(self, mode):
         m = int(mode)
         if m not in (FF_MODE_INTERRUPT, FF_MODE_COMPARATOR):
             raise ValueError("unknown FF mode %d" % m)
         self._cr2_rmw(CR2_FFMODE, CR2_FFMODE if m else 0)
 
-    def get_ff_mode(self):
-        """Current fan-fail mode (FF_MODE_INTERRUPT or FF_MODE_COMPARATOR)."""
-        if self._burst_read(REG_CR2, 1)[0] & CR2_FFMODE:
-            return FF_MODE_COMPARATOR
-        return FF_MODE_INTERRUPT
-
     # -- RD / locked-rotor mode (F14) -------------------------------------------
 
-    def set_rd_mode(self, enabled):
-        """Select the fan-sense signal type (CR2.FSST): True = RD/
-        locked-rotor input on both TACH pins, False = tachometer pulses."""
-        self._cr2_rmw(CR2_FSST, CR2_FSST if enabled else 0)
-
-    def rd_mode_enabled(self):
-        """True if the TACH inputs expect RD/locked-rotor signals (CR2.FSST)."""
+    @property
+    def rd_mode(self):
+        """RD/locked-rotor input mode (CR2.FSST); assign True/False to
+        select: True = RD/locked-rotor signal on both TACH pins,
+        False = tachometer pulses."""
         return bool(self._burst_read(REG_CR2, 1)[0] & CR2_FSST)
 
-    def set_rd_polarity(self, high_means_spinning):
-        """Set RD signal polarity (CR2.RDPS): True = RD high means the fan
-        is spinning, False = RD low means spinning."""
-        self._cr2_rmw(CR2_RDPS, CR2_RDPS if high_means_spinning else 0)
+    @rd_mode.setter
+    def rd_mode(self, enabled):
+        self._cr2_rmw(CR2_FSST, CR2_FSST if enabled else 0)
 
-    def get_rd_polarity(self):
-        """True if RD high means spinning (CR2.RDPS)."""
+    @property
+    def rd_polarity(self):
+        """RD signal polarity (CR2.RDPS): True = RD high means the fan
+        is spinning, False = RD low means spinning; assign to change."""
         return bool(self._burst_read(REG_CR2, 1)[0] & CR2_RDPS)
+
+    @rd_polarity.setter
+    def rd_polarity(self, high_means_spinning):
+        self._cr2_rmw(CR2_RDPS, CR2_RDPS if high_means_spinning else 0)
 
     # -- alert mask (F17) --------------------------------------------------------
 
-    def set_alert_mask(self, alarms):
-        """Mask/unmask alarm outputs for the given alarms (MASK, 0x04).
+    @property
+    def alert_mask(self):
+        """Masked alarm outputs (MASK, 0x04); assign a bitmask to change.
 
-        alarms is a bitmask of SR_* flag constants — bit positions match the
-        MASK register one-to-one (except RDFA, which has no mask bit because
-        it never drives ALERT). Only the six alarm bits are written; the
-        reserved upper bits (which should stay 1) are preserved.
+        Bit positions match the SR_* flag constants one-to-one (except RDFA,
+        which has no mask bit because it never drives ALERT). Only the six
+        alarm bits are written; the reserved upper bits (which should stay 1)
+        are preserved.
         """
+        return self._burst_read(REG_MASK, 1)[0] & MASK_ALARM_FIELD
+
+    @alert_mask.setter
+    def alert_mask(self, alarms):
         m = int(alarms)
         if m < 0 or m > MASK_ALARM_FIELD:
             raise ValueError("alert mask 0x%02X out of range" % m)
         v = self._burst_read(REG_MASK, 1)[0]
         self._burst_write(REG_MASK, (((v & ~MASK_ALARM_FIELD) | m) & 0xFF,))
-
-    def get_alert_mask(self):
-        """Currently masked alarms (bitmask of SR_* flag constants)."""
-        return self._burst_read(REG_MASK, 1)[0] & MASK_ALARM_FIELD

@@ -382,44 +382,46 @@ class TestSetpoints(unittest.TestCase):
 
     def test_factory_defaults_decode(self):
         dev, _, _ = make_dev()
-        self.assertEqual(dev.get_local_high(), 70.0)
-        self.assertEqual(dev.get_remote_high(), 85.0)
-        self.assertEqual(dev.get_local_overtemp(), 85.0)
-        self.assertEqual(dev.get_remote_overtemp(), 110.0)
+        self.assertEqual(dev.local_high_c, 70.0)
+        self.assertEqual(dev.remote_high_c, 85.0)
+        self.assertEqual(dev.local_overtemp_c, 85.0)
+        self.assertEqual(dev.remote_overtemp_c, 110.0)
 
     def test_set_get_roundtrip_all_four(self):
         dev, chip, _ = make_dev()
-        vals = {"local_high": 60.5, "remote_high": 90.0,
-                "local_overtemp": 95.25, "remote_overtemp": 105.0}
+        vals = {"local_high_c": 60.5, "remote_high_c": 90.0,
+                "local_overtemp_c": 95.25, "remote_overtemp_c": 105.0}
         for name, hi, lo in self.PAIRS:
-            getattr(dev, "set_" + name)(vals[name])
-            self.assertEqual(getattr(dev, "get_" + name)(), vals[name],
-                             msg=name)
+            prop = name + "_c"
+            setattr(dev, prop, vals[prop])
+            self.assertEqual(getattr(dev, prop), vals[prop], msg=prop)
             raw = (chip.regs[hi] << 8) | chip.regs[lo]
-            self.assertEqual(raw, temp_to_raw16(vals[name]), msg=name)
+            self.assertEqual(raw, temp_to_raw16(vals[prop]), msg=prop)
 
     def test_negative_setpoint_encoding(self):
         dev, chip, _ = make_dev()
-        dev.set_local_high(-10.0)
-        self.assertEqual(dev.get_local_high(), -10.0)
+        dev.local_high_c = -10.0
+        self.assertEqual(dev.local_high_c, -10.0)
         raw = (chip.regs[REG_LHSH] << 8) | chip.regs[REG_LHSL]
         self.assertEqual(raw, 0xF600)            # q=-80 -> (-80<<5)&0xFFFF
 
     def test_wire_level_single_aligned_write(self):
         dev, chip, _ = make_dev()
-        dev.set_remote_overtemp(110.0)
+        dev.remote_overtemp_c = 110.0
         writes = [t for t in chip.txns if t[0] == "w"]
         self.assertEqual(writes, [("w", REG_ROTSH, 2)])
         self.assertEqual(chip.violations, [])
 
     def test_out_of_range_raises(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_local_high, 128.0)
-        self.assertRaises(ValueError, dev.set_remote_high, -128.125)
-        self.assertRaises(ValueError, dev.set_local_overtemp, 200.0)
-        self.assertRaises(ValueError, dev.set_remote_overtemp, -200.0)
-
-
+        with self.assertRaises(ValueError):
+            dev.local_high_c = 128.0
+        with self.assertRaises(ValueError):
+            dev.remote_high_c = -128.125
+        with self.assertRaises(ValueError):
+            dev.local_overtemp_c = 200.0
+        with self.assertRaises(ValueError):
+            dev.remote_overtemp_c = -200.0
 class TestLutIndexForTemp(unittest.TestCase):
     """B3: temperature -> LUT window mapping (F5)."""
 
@@ -473,29 +475,32 @@ class TestLutAccess(unittest.TestCase):
 
     def test_factory_default_is_all_ff(self):
         dev, _, _ = make_dev()
-        lut = dev.lut_get()
+        lut = dev.lut
         self.assertEqual(len(lut), 48)
         self.assertTrue(all(v == 0xFF for v in lut))
 
     def test_bulk_set_wire_level(self):
         dev, chip, _ = make_dev()
         lut = bytes((i * 5) & 0xFF for i in range(48))
-        dev.lut_set(lut)
+        dev.lut = lut
         writes = [t for t in chip.txns if t[0] == "w"]
         self.assertEqual(len(writes), 6)
         for w in writes:
             self.assertEqual(w[2], 8)
             self.assertEqual(w[1] % PAGE_SIZE, 0)
-        self.assertEqual(dev.lut_get(), list(lut))
+        self.assertEqual(dev.lut, list(lut))
         self.assertEqual(chip.violations, [])
 
     def test_bulk_set_rejects_bad_length_and_values(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.lut_set, [0] * 47)
-        self.assertRaises(ValueError, dev.lut_set, [0] * 49)
-        self.assertRaises(ValueError, dev.lut_set, [0] * 47 + [-1])
-        self.assertRaises(ValueError, dev.lut_set, [0] * 47 + [256])
-
+        with self.assertRaises(ValueError):
+            dev.lut = [0] * 47
+        with self.assertRaises(ValueError):
+            dev.lut = [0] * 49
+        with self.assertRaises(ValueError):
+            dev.lut = [0] * 47 + [-1]
+        with self.assertRaises(ValueError):
+            dev.lut = [0] * 47 + [256]
     def test_single_entry_roundtrip(self):
         dev, chip, _ = make_dev()
         dev.lut_set_index(12, 200)
@@ -518,20 +523,20 @@ class TestManualMode(unittest.TestCase):
 
     def test_manual_enable_roundtrip_preserves_other_bits(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.manual_enabled())
-        dev.manual_enable(True)
-        self.assertTrue(dev.manual_enabled())
+        self.assertFalse(dev.manual)
+        dev.manual = True
+        self.assertTrue(dev.manual)
         self.assertEqual(chip.regs[REG_CR2], 0x11)   # factory 0x10 | DFC
-        dev.manual_enable(False)
-        self.assertFalse(dev.manual_enabled())
+        dev.manual = False
+        self.assertFalse(dev.manual)
         self.assertEqual(chip.regs[REG_CR2], 0x10)   # restored exactly
 
     def test_set_duty_pct_and_raw(self):
         dev, chip, _ = make_dev()
         dev.set_duty_pct(50.0)
         self.assertEqual(chip.regs[REG_PWMR], 128)
-        self.assertEqual(dev.get_duty_cmd_raw(), 128)
-        dev.set_duty_raw(200)
+        self.assertEqual(dev.duty_cmd_raw, 128)
+        dev.duty_cmd_raw = 200
         self.assertEqual(chip.regs[REG_PWMR], 200)
         dev.set_duty_pct(100.0)
         self.assertEqual(chip.regs[REG_PWMR], 255)
@@ -542,14 +547,15 @@ class TestManualMode(unittest.TestCase):
         dev, _, _ = make_dev()
         self.assertRaises(ValueError, dev.set_duty_pct, -0.1)
         self.assertRaises(ValueError, dev.set_duty_pct, 100.1)
-        self.assertRaises(ValueError, dev.set_duty_raw, -1)
-        self.assertRaises(ValueError, dev.set_duty_raw, 256)
-
+        with self.assertRaises(ValueError):
+            dev.duty_cmd_raw = -1
+        with self.assertRaises(ValueError):
+            dev.duty_cmd_raw = 256
     def test_actual_duty_readback(self):
         dev, chip, _ = make_dev()
         chip.regs[REG_PWMV] = 0x80                   # RO register, mock-seeded
-        self.assertEqual(dev.get_actual_duty_raw(), 128)
-        self.assertEqual(dev.get_actual_duty_pct(), 50.0)
+        self.assertEqual(dev.actual_duty_raw, 128)
+        self.assertEqual(dev.actual_duty_pct, 50.0)
 
 
 class TestAutoConfig(unittest.TestCase):
@@ -558,79 +564,81 @@ class TestAutoConfig(unittest.TestCase):
     def test_index_source_all_three(self):
         dev, chip, _ = make_dev()
         for src in (INDEX_LOCAL, INDEX_REMOTE, INDEX_MAX):
-            dev.set_index_source(src)
-            self.assertEqual(dev.get_index_source(), src)
+            dev.index_source = src
+            self.assertEqual(dev.index_source, src)
             self.assertEqual(chip.regs[REG_CR1] & 0x03, src)
         # factory default is remote-index (CR1 = 0x01)
         dev.write_reg(REG_CR1, bytes([0x01]))
-        self.assertEqual(dev.get_index_source(), INDEX_REMOTE)
+        self.assertEqual(dev.index_source, INDEX_REMOTE)
 
     def test_index_source_rejects_reserved(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_index_source, 0x02)  # reserved
-        self.assertRaises(ValueError, dev.set_index_source, 0x04)
-
+        with self.assertRaises(ValueError):
+            dev.index_source = 0x02          # reserved
+        with self.assertRaises(ValueError):
+            dev.index_source = 0x04
     def test_index_source_preserves_other_cr1_bits(self):
         dev, chip, _ = make_dev()
         dev.write_reg(REG_CR1, bytes([0x20]))         # HYST set, others clear
-        dev.set_index_source(INDEX_MAX)
+        dev.index_source = INDEX_MAX
         self.assertEqual(chip.regs[REG_CR1], 0x23)    # HYST kept, bits[1:0]=03
 
     def test_hysteresis_roundtrip(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_hysteresis_c(), 2)   # factory default
-        dev.set_hysteresis_c(4)
-        self.assertEqual(dev.get_hysteresis_c(), 4)
+        self.assertEqual(dev.hysteresis_c, 2)   # factory default
+        dev.hysteresis_c = 4
+        self.assertEqual(dev.hysteresis_c, 4)
         self.assertEqual(chip.regs[REG_CR1] & CR1_HYST, CR1_HYST)
-        dev.set_hysteresis_c(2)
-        self.assertEqual(dev.get_hysteresis_c(), 2)
+        dev.hysteresis_c = 2
+        self.assertEqual(dev.hysteresis_c, 2)
         self.assertEqual(chip.regs[REG_CR1] & CR1_HYST, 0)
 
     def test_hysteresis_rejects_others(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_hysteresis_c, 3)
-        self.assertRaises(ValueError, dev.set_hysteresis_c, 1)
-
-
+        with self.assertRaises(ValueError):
+            dev.hysteresis_c = 3
+        with self.assertRaises(ValueError):
+            dev.hysteresis_c = 1
 class TestPwmConfig(unittest.TestCase):
     """B4: PWM frequency + polarity (F8)."""
 
     def test_freq_all_four(self):
         dev, _, _ = make_dev()
         for hz in (PWM_FREQ_33HZ, PWM_FREQ_150HZ, PWM_FREQ_1P5KHZ, PWM_FREQ_25KHZ):
-            dev.set_pwm_freq_hz(hz)
-            self.assertEqual(dev.get_pwm_freq_hz(), hz)
+            dev.pwm_freq_hz = hz
+            self.assertEqual(dev.pwm_freq_hz, hz)
 
     def test_freq_bit_values(self):
         dev, chip, _ = make_dev()
-        dev.set_pwm_freq_hz(PWM_FREQ_33HZ)
+        dev.pwm_freq_hz = PWM_FREQ_33HZ
         self.assertEqual(chip.regs[REG_CR1] & CR1_DRV_MASK, CR1_DRV_33HZ)
-        dev.set_pwm_freq_hz(PWM_FREQ_150HZ)
+        dev.pwm_freq_hz = PWM_FREQ_150HZ
         self.assertEqual(chip.regs[REG_CR1] & CR1_DRV_MASK, CR1_DRV_150HZ)
-        dev.set_pwm_freq_hz(PWM_FREQ_1P5KHZ)
+        dev.pwm_freq_hz = PWM_FREQ_1P5KHZ
         self.assertEqual(chip.regs[REG_CR1] & CR1_DRV_MASK, CR1_DRV_1P5KHZ)
-        dev.set_pwm_freq_hz(PWM_FREQ_25KHZ)
+        dev.pwm_freq_hz = PWM_FREQ_25KHZ
         self.assertEqual(chip.regs[REG_CR1] & CR1_DRV_MASK, CR1_DRV_25KHZ)
 
     def test_freq_rejects_unsupported(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_pwm_freq_hz, 1000)
-        self.assertRaises(ValueError, dev.set_pwm_freq_hz, 0)
-
+        with self.assertRaises(ValueError):
+            dev.pwm_freq_hz = 1000
+        with self.assertRaises(ValueError):
+            dev.pwm_freq_hz = 0
     def test_polarity_roundtrip(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_pwm_polarity(), MAX31760.POLARITY_POSITIVE)
-        dev.set_pwm_polarity(MAX31760.POLARITY_NEGATIVE)
-        self.assertEqual(dev.get_pwm_polarity(), MAX31760.POLARITY_NEGATIVE)
+        self.assertEqual(dev.pwm_polarity, MAX31760.POLARITY_POSITIVE)
+        dev.pwm_polarity = MAX31760.POLARITY_NEGATIVE
+        self.assertEqual(dev.pwm_polarity, MAX31760.POLARITY_NEGATIVE)
         self.assertEqual(chip.regs[REG_CR1] & CR1_PPS_NEGATIVE, CR1_PPS_NEGATIVE)
-        dev.set_pwm_polarity(MAX31760.POLARITY_POSITIVE)
-        self.assertEqual(dev.get_pwm_polarity(), MAX31760.POLARITY_POSITIVE)
+        dev.pwm_polarity = MAX31760.POLARITY_POSITIVE
+        self.assertEqual(dev.pwm_polarity, MAX31760.POLARITY_POSITIVE)
         self.assertEqual(chip.regs[REG_CR1] & CR1_PPS_NEGATIVE, 0)
 
     def test_polarity_rejects_bad_value(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_pwm_polarity, 2)
-
+        with self.assertRaises(ValueError):
+            dev.pwm_polarity = 2
     def test_class_constants_match_module(self):
         self.assertEqual(MAX31760.INDEX_MAX, INDEX_MAX)
         self.assertEqual(MAX31760.RAMP_IMMEDIATE, RAMP_IMMEDIATE)
@@ -643,17 +651,18 @@ class TestRampRate(unittest.TestCase):
 
     def test_ramp_rate_all_four_preserve_other_bits(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_ramp_rate(), RAMP_SLOW)   # factory CR3=0x03
+        self.assertEqual(dev.ramp_rate, RAMP_SLOW)   # factory CR3=0x03
         for r in (RAMP_MED_SLOW, RAMP_MED_FAST, RAMP_IMMEDIATE, RAMP_SLOW):
-            dev.set_ramp_rate(r)
-            self.assertEqual(dev.get_ramp_rate(), r)
+            dev.ramp_rate = r
+            self.assertEqual(dev.ramp_rate, r)
             self.assertEqual(chip.regs[REG_CR3], 0x03 | r)  # TACH bits kept
 
     def test_ramp_rate_rejects_unknown(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_ramp_rate, 0x40)
-        self.assertRaises(ValueError, dev.set_ramp_rate, 0x08)
-
+        with self.assertRaises(ValueError):
+            dev.ramp_rate = 0x40
+        with self.assertRaises(ValueError):
+            dev.ramp_rate = 0x08
     def test_wait_for_duty_immediate_hit(self):
         dev, chip, tr = make_dev()
         chip.regs[REG_PWMV] = 128
@@ -680,16 +689,16 @@ class TestTachometer(unittest.TestCase):
 
     def test_tach_enable_roundtrips_preserve_other_bits(self):
         dev, chip, _ = make_dev()
-        self.assertTrue(dev.tach1_enabled())      # factory CR3=0x03
-        self.assertTrue(dev.tach2_enabled())
-        dev.tach1_enable(False)
-        self.assertFalse(dev.tach1_enabled())
-        self.assertTrue(dev.tach2_enabled())      # untouched
+        self.assertTrue(dev.tach1_enabled)      # factory CR3=0x03
+        self.assertTrue(dev.tach2_enabled)
+        dev.tach1_enabled = False
+        self.assertFalse(dev.tach1_enabled)
+        self.assertTrue(dev.tach2_enabled)      # untouched
         self.assertEqual(chip.regs[REG_CR3], 0x02)
-        dev.tach2_enable(False)
+        dev.tach2_enabled = False
         self.assertEqual(chip.regs[REG_CR3], 0x00)
-        dev.tach1_enable(True)
-        dev.tach2_enable(True)
+        dev.tach1_enabled = True
+        dev.tach2_enabled = True
         self.assertEqual(chip.regs[REG_CR3], 0x03)  # restored exactly
 
     def test_rpm_port1_math(self):
@@ -722,19 +731,19 @@ class TestTachometer(unittest.TestCase):
 
     def test_threshold_roundtrip_and_wire_bytes(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_tach_threshold(), 0xFFFE)  # factory
+        self.assertEqual(dev.tach_threshold, 0xFFFE)  # factory
         for val in (0, 1, 40000, 65535):
-            dev.set_tach_threshold(val)
-            self.assertEqual(dev.get_tach_threshold(), val)
+            dev.tach_threshold = val
+            self.assertEqual(dev.tach_threshold, val)
             self.assertEqual(chip.regs[REG_TCTH], (val >> 8) & 0xFF)
             self.assertEqual(chip.regs[REG_TCTL], val & 0xFF)
 
     def test_threshold_rejects_out_of_range(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_tach_threshold, -1)
-        self.assertRaises(ValueError, dev.set_tach_threshold, 65536)
-
-
+        with self.assertRaises(ValueError):
+            dev.tach_threshold = -1
+        with self.assertRaises(ValueError):
+            dev.tach_threshold = 65536
 class TestFaultHandling(unittest.TestCase):
     """B7: status, CLRFAIL, FFDC, FF_0, FF mode, RD mode, alert mask."""
 
@@ -779,97 +788,101 @@ class TestFaultHandling(unittest.TestCase):
 
     def test_ffdc_roundtrip_and_validation(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_ffdc_raw(), 0xFF)   # factory
-        dev.set_ffdc_raw(0x80)
-        self.assertEqual(dev.get_ffdc_raw(), 0x80)
+        self.assertEqual(dev.ff_dc_raw, 0xFF)   # factory
+        dev.ff_dc_raw = 0x80
+        self.assertEqual(dev.ff_dc_raw, 0x80)
         self.assertEqual(chip.regs[REG_FFDC], 0x80)
         dev.set_ffdc_pct(50.0)
-        self.assertEqual(dev.get_ffdc_raw(), 128)
-        self.assertRaises(ValueError, dev.set_ffdc_raw, 256)
-        self.assertRaises(ValueError, dev.set_ffdc_raw, -1)
+        self.assertEqual(dev.ff_dc_raw, 128)
+        with self.assertRaises(ValueError):
+            dev.ff_dc_raw = 256
+        with self.assertRaises(ValueError):
+            dev.ff_dc_raw = -1
         self.assertRaises(ValueError, dev.set_ffdc_pct, 101.0)
 
     def test_ff_zero_detection_toggle(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.ff_zero_detection())    # factory CR3=0x03
-        dev.set_ff_zero_detection(True)
-        self.assertTrue(dev.ff_zero_detection())
+        self.assertFalse(dev.ff_zero_detection)    # factory CR3=0x03
+        dev.ff_zero_detection = True
+        self.assertTrue(dev.ff_zero_detection)
         self.assertEqual(chip.regs[REG_CR3], 0x43)   # other bits kept
-        dev.set_ff_zero_detection(False)
+        dev.ff_zero_detection = False
         self.assertEqual(chip.regs[REG_CR3], 0x03)
 
     def test_ff_mode_roundtrip(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_ff_mode(), FF_MODE_COMPARATOR)  # factory
-        dev.set_ff_mode(FF_MODE_INTERRUPT)
-        self.assertEqual(dev.get_ff_mode(), FF_MODE_INTERRUPT)
+        self.assertEqual(dev.ff_mode, FF_MODE_COMPARATOR)  # factory
+        dev.ff_mode = FF_MODE_INTERRUPT
+        self.assertEqual(dev.ff_mode, FF_MODE_INTERRUPT)
         self.assertEqual(chip.regs[REG_CR2], 0x00)
-        dev.set_ff_mode(FF_MODE_COMPARATOR)
+        dev.ff_mode = FF_MODE_COMPARATOR
         self.assertEqual(chip.regs[REG_CR2], 0x10)
-        self.assertRaises(ValueError, dev.set_ff_mode, 2)
-
+        with self.assertRaises(ValueError):
+            dev.ff_mode = 2
     def test_rd_mode_and_polarity(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.rd_mode_enabled())
-        self.assertFalse(dev.get_rd_polarity())
-        dev.set_rd_mode(True)
-        dev.set_rd_polarity(True)
-        self.assertTrue(dev.rd_mode_enabled())
-        self.assertTrue(dev.get_rd_polarity())
+        self.assertFalse(dev.rd_mode)
+        self.assertFalse(dev.rd_polarity)
+        dev.rd_mode = True
+        dev.rd_polarity = True
+        self.assertTrue(dev.rd_mode)
+        self.assertTrue(dev.rd_polarity)
         self.assertEqual(chip.regs[REG_CR2], 0x16)   # 0x10 | FSST | RDPS
-        dev.set_rd_mode(False)
-        dev.set_rd_polarity(False)
+        dev.rd_mode = False
+        dev.rd_polarity = False
         self.assertEqual(chip.regs[REG_CR2], 0x10)   # restored exactly
 
     def test_alert_mask_roundtrip_preserves_reserved(self):
         dev, chip, _ = make_dev()
         self.assertEqual(chip.regs[REG_MASK], 0xC0)  # factory
-        self.assertEqual(dev.get_alert_mask(), 0x00)
-        dev.set_alert_mask(SR_TACH1A | SR_TACH2A)
-        self.assertEqual(dev.get_alert_mask(), 0x03)
+        self.assertEqual(dev.alert_mask, 0x00)
+        dev.alert_mask = SR_TACH1A | SR_TACH2A
+        self.assertEqual(dev.alert_mask, 0x03)
         self.assertEqual(chip.regs[REG_MASK], 0xC3)  # reserved bits kept
-        dev.set_alert_mask(MASK_ALARM_FIELD)
+        dev.alert_mask = MASK_ALARM_FIELD
         self.assertEqual(chip.regs[REG_MASK], 0xFF)
-        dev.set_alert_mask(0)
+        dev.alert_mask = 0
         self.assertEqual(chip.regs[REG_MASK], 0xC0)  # back to factory
 
     def test_alert_mask_rejects_reserved_bits(self):
         dev, _, _ = make_dev()
-        self.assertRaises(ValueError, dev.set_alert_mask, 0x40)
-        self.assertRaises(ValueError, dev.set_alert_mask, 0xFF)
+        with self.assertRaises(ValueError):
+            dev.alert_mask = 0x40
+        with self.assertRaises(ValueError):
+            dev.alert_mask = 0xFF
         # RDFA has no mask bit (it never drives ALERT): 0x7F must be rejected
-        self.assertRaises(ValueError, dev.set_alert_mask, SR_ALARM_MASK)
-        self.assertRaises(ValueError, dev.set_alert_mask, -1)
-
-
+        with self.assertRaises(ValueError):
+            dev.alert_mask = SR_ALARM_MASK
+        with self.assertRaises(ValueError):
+            dev.alert_mask = -1
 class TestThreeWireAssist(unittest.TestCase):
     """B8: spin-up (SPEN), pulse stretch (PSEN), TACHFULL, one-shot measure."""
 
     def test_spin_up_toggle_preserves_cr2(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.spin_up_enabled())          # factory CR2=0x10
-        dev.spin_up_enable(True)
-        self.assertTrue(dev.spin_up_enabled())
+        self.assertFalse(dev.spin_up_enabled)          # factory CR2=0x10
+        dev.spin_up_enabled = True
+        self.assertTrue(dev.spin_up_enabled)
         self.assertEqual(chip.regs[REG_CR2], 0x30)       # FFMODE kept
-        dev.spin_up_enable(False)
+        dev.spin_up_enabled = False
         self.assertEqual(chip.regs[REG_CR2], 0x10)
 
     def test_pulse_stretch_toggle_preserves_cr3(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.pulse_stretch_enabled())    # factory CR3=0x03
-        dev.pulse_stretch_enable(True)
-        self.assertTrue(dev.pulse_stretch_enabled())
+        self.assertFalse(dev.pulse_stretch_enabled)    # factory CR3=0x03
+        dev.pulse_stretch_enabled = True
+        self.assertTrue(dev.pulse_stretch_enabled)
         self.assertEqual(chip.regs[REG_CR3], 0x07)       # tach enables kept
-        dev.pulse_stretch_enable(False)
+        dev.pulse_stretch_enabled = False
         self.assertEqual(chip.regs[REG_CR3], 0x03)
 
     def test_tacho_full_toggle_preserves_cr3(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.tacho_full_enabled())
-        dev.tacho_full_enable(True)
-        self.assertTrue(dev.tacho_full_enabled())
+        self.assertFalse(dev.tacho_full_enabled)
+        dev.tacho_full_enabled = True
+        self.assertTrue(dev.tacho_full_enabled)
         self.assertEqual(chip.regs[REG_CR3], 0x0B)
-        dev.tacho_full_enable(False)
+        dev.tacho_full_enabled = False
         self.assertEqual(chip.regs[REG_CR3], 0x03)
 
     def test_measure_tach_once_times_out_on_static_count(self):
@@ -878,7 +891,7 @@ class TestThreeWireAssist(unittest.TestCase):
         chip.regs[REG_TC1L] = 0x0D                       # static mock: no change
         self.assertRaises(TimeoutError, dev.measure_tach_once,
                           port=1, timeout_ms=150)
-        self.assertFalse(dev.pulse_stretch_enabled())    # cleared in finally
+        self.assertFalse(dev.pulse_stretch_enabled)    # cleared in finally
 
     def test_measure_tach_once_success_path(self):
         dev, chip, tr = make_dev()
@@ -898,7 +911,7 @@ class TestThreeWireAssist(unittest.TestCase):
         tr.burst_read = fake_burst_read
         cnt = dev.measure_tach_once(port=1, timeout_ms=150)
         self.assertEqual(cnt, 0x050E)
-        self.assertFalse(dev.pulse_stretch_enabled())
+        self.assertFalse(dev.pulse_stretch_enabled)
 
     def test_measure_tach_once_port2_times_out_on_static_count(self):
         dev, chip, _ = make_dev()
@@ -910,11 +923,11 @@ class TestThreeWireAssist(unittest.TestCase):
     def test_measure_tach_once_preconditions(self):
         dev, _, _ = make_dev()
         self.assertRaises(ValueError, dev.measure_tach_once, port=3)
-        dev.set_pwm_freq_hz(PWM_FREQ_150HZ)
+        dev.pwm_freq_hz = PWM_FREQ_150HZ
         self.assertRaises(ValueError, dev.measure_tach_once, port=1,
                           timeout_ms=50)
-        dev.set_pwm_freq_hz(PWM_FREQ_33HZ)
-        dev.tacho_full_enable(True)
+        dev.pwm_freq_hz = PWM_FREQ_33HZ
+        dev.tacho_full_enabled = True
         self.assertRaises(ValueError, dev.measure_tach_once, port=1,
                           timeout_ms=50)
 
@@ -927,9 +940,10 @@ class TestPwmFreqGuard(unittest.TestCase):
         dev, _, _ = make_dev()
         saved = core_mod._PWM_FREQ_TO_BITS
         try:
-            dev.set_pwm_freq_hz(PWM_FREQ_150HZ)   # writes DRV = 0x08 (full table)
+            dev.pwm_freq_hz = PWM_FREQ_150HZ   # writes DRV = 0x08 (full table)
             core_mod._PWM_FREQ_TO_BITS = ((PWM_FREQ_33HZ, CR1_DRV_33HZ),)
-            self.assertRaises(ValueError, dev.get_pwm_freq_hz)
+            with self.assertRaises(ValueError):
+                _ = dev.pwm_freq_hz
         finally:
             core_mod._PWM_FREQ_TO_BITS = saved
 
@@ -959,14 +973,14 @@ class TestAlertAndIdeality(unittest.TestCase):
 
     def test_alert_mode_roundtrip(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_alert_mode(), ALERT_MODE_INTERRUPT)  # factory
-        dev.set_alert_mode(ALERT_MODE_FAULT_INDICATOR)
-        self.assertEqual(dev.get_alert_mode(), ALERT_MODE_FAULT_INDICATOR)
+        self.assertEqual(dev.alert_mode, ALERT_MODE_INTERRUPT)  # factory
+        dev.alert_mode = ALERT_MODE_FAULT_INDICATOR
+        self.assertEqual(dev.alert_mode, ALERT_MODE_FAULT_INDICATOR)
         self.assertEqual(chip.regs[REG_CR2], 0x50)   # 0x10 | ALERTS
-        dev.set_alert_mode(ALERT_MODE_INTERRUPT)
+        dev.alert_mode = ALERT_MODE_INTERRUPT
         self.assertEqual(chip.regs[REG_CR2], 0x10)
-        self.assertRaises(ValueError, dev.set_alert_mode, 2)
-
+        with self.assertRaises(ValueError):
+            dev.alert_mode = 2
     def test_service_alert_reads_and_clears_sr(self):
         dev, chip, _ = make_dev()
         chip.sr_latch = SR_LHA | SR_RHA
@@ -985,20 +999,21 @@ class TestAlertAndIdeality(unittest.TestCase):
 
     def test_ideality_index_roundtrip_and_validation(self):
         dev, chip, _ = make_dev()
-        self.assertEqual(dev.get_ideality_factor_index(), 0x18)  # factory
-        self.assertEqual(dev.get_ideality_factor(), 1.0080)
-        dev.set_ideality_factor_index(0)
+        self.assertEqual(dev.ideality_factor_index, 0x18)  # factory
+        self.assertEqual(dev.ideality_factor, 1.0080)
+        dev.ideality_factor_index = 0
         self.assertEqual(chip.regs[REG_IFR], 0x00)
-        dev.set_ideality_factor_index(63)
+        dev.ideality_factor_index = 63
         self.assertEqual(chip.regs[REG_IFR], 0x3F)
-        self.assertRaises(ValueError, dev.set_ideality_factor_index, 64)
-        self.assertRaises(ValueError, dev.set_ideality_factor_index, -1)
-
+        with self.assertRaises(ValueError):
+            dev.ideality_factor_index = 64
+        with self.assertRaises(ValueError):
+            dev.ideality_factor_index = -1
     def test_ideality_nearest_match(self):
         dev, _, _ = make_dev()
         i = dev.set_ideality_factor(1.0)
         self.assertEqual(i, 16)                     # table[16] = 1.0000
-        self.assertEqual(dev.get_ideality_factor(), 1.0000)
+        self.assertEqual(dev.ideality_factor, 1.0000)
         i = dev.set_ideality_factor(0.985)
         self.assertEqual(i, 1)                      # 0.9853 closer than 0.9844
         # Exact midpoint between 1.0000 and 1.0010 -> lower index wins
@@ -1006,7 +1021,7 @@ class TestAlertAndIdeality(unittest.TestCase):
         self.assertEqual(i, 16)
         # Round-trip consistency for an arbitrary value
         i = dev.set_ideality_factor(1.02)
-        self.assertEqual(dev.get_ideality_factor(), IDEALITY_TABLE[i])
+        self.assertEqual(dev.ideality_factor, IDEALITY_TABLE[i])
 
     def test_ideality_range_rejection(self):
         dev, _, _ = make_dev()
@@ -1150,12 +1165,12 @@ class TestEepromLifecycle(unittest.TestCase):
 
     def test_standby_roundtrip(self):
         dev, chip, _ = make_dev()
-        self.assertFalse(dev.standby_active())
-        dev.enter_standby()
-        self.assertTrue(dev.standby_active())
+        self.assertFalse(dev.standby)
+        dev.standby = True
+        self.assertTrue(dev.standby)
         self.assertEqual(chip.regs[REG_CR2], 0x90)     # 0x10 | STBY
-        dev.exit_standby()
-        self.assertFalse(dev.standby_active())
+        dev.standby = False
+        self.assertFalse(dev.standby)
         self.assertEqual(chip.regs[REG_CR2], 0x10)
 
     def test_user_memory_single(self):
@@ -1345,40 +1360,40 @@ class TestCPIntegration(unittest.TestCase):
         self.assertIn(0x50, dev.scan())
         self.assertEqual(dev.read_reg(REG_CR1, 1)[0], FACTORY_DEFAULTS[REG_CR1])
         # manual mode + duty + ramp
-        dev.manual_enable(True)
-        self.assertTrue(dev.manual_enabled())
-        dev.set_ramp_rate(RAMP_IMMEDIATE)
+        dev.manual = True
+        self.assertTrue(dev.manual)
+        dev.ramp_rate = RAMP_IMMEDIATE
         dev.set_duty_pct(50.0)
         self.chip.regs[REG_PWMV] = 128          # emulate a settled ramp
         self.assertTrue(dev.wait_for_duty(50.0))
-        self.assertEqual(dev.get_actual_duty_raw(), 128)
+        self.assertEqual(dev.actual_duty_raw, 128)
         # LUT
         dev.lut_set_index(25, 128)              # raw duty 0..255
         self.assertEqual(dev.lut_get_index(25), 128)
         # temperature + setpoints
         self.assertIsInstance(dev.local_temp_c, float)
-        dev.set_local_high(60.0)
-        self.assertAlmostEqual(dev.get_local_high(), 60.0, places=2)
+        dev.local_high_c = 60.0
+        self.assertAlmostEqual(dev.local_high_c, 60.0, places=2)
         # tach
-        dev.tach1_enable(True)
+        dev.tach1_enabled = True
         self.assertEqual(dev.rpm(1), 0.0)          # no pulses in the mock
-        dev.set_tach_threshold(1000)
-        self.assertEqual(dev.get_tach_threshold(), 1000)
+        dev.tach_threshold = 1000
+        self.assertEqual(dev.tach_threshold, 1000)
         # fault domain
         self.assertEqual(dev.status_raw(), 0x00)
         dev.set_ffdc_pct(50.0)
-        self.assertEqual(dev.get_ffdc_raw(), 128)
+        self.assertEqual(dev.ff_dc_raw, 128)
         mask = MASK_ALARM_FIELD & ~SR_TACH1A
-        dev.set_alert_mask(mask)
-        self.assertEqual(dev.get_alert_mask(), mask)
+        dev.alert_mask = mask
+        self.assertEqual(dev.alert_mask, mask)
         # 3-wire assists + alert/ideality
-        dev.spin_up_enable(True)
-        self.assertTrue(dev.spin_up_enabled())
-        dev.pulse_stretch_enable(True)
-        self.assertTrue(dev.pulse_stretch_enabled())
-        self.assertFalse(dev.tacho_full_enabled())
-        self.assertEqual(dev.get_alert_mode(), ALERT_MODE_INTERRUPT)
-        self.assertEqual(dev.get_ideality_factor_index(), 0x18)
+        dev.spin_up_enabled = True
+        self.assertTrue(dev.spin_up_enabled)
+        dev.pulse_stretch_enabled = True
+        self.assertTrue(dev.pulse_stretch_enabled)
+        self.assertFalse(dev.tacho_full_enabled)
+        self.assertEqual(dev.alert_mode, ALERT_MODE_INTERRUPT)
+        self.assertEqual(dev.ideality_factor_index, 0x18)
         self.assertEqual(dev.set_ideality_factor(1.0), 16)
         # EEPROM lifecycle through the chunked CP read/write path
         self.chip.regs[REG_CR1] = 0x02
@@ -1392,10 +1407,10 @@ class TestCPIntegration(unittest.TestCase):
         # load step above); standby; user memory
         dev.soft_por()
         self.assertEqual(self.chip.regs[REG_CR1], 0x07)
-        dev.enter_standby()
-        self.assertTrue(dev.standby_active())
-        dev.exit_standby()
-        self.assertFalse(dev.standby_active())
+        dev.standby = True
+        self.assertTrue(dev.standby)
+        dev.standby = False
+        self.assertFalse(dev.standby)
         dev.user_memory_set(0, 0xA5)
         self.assertEqual(dev.user_memory_get(0), 0xA5)
         # presets

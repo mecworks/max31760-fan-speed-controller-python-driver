@@ -79,13 +79,13 @@ assert -40.0 < lt < 125.0, "local temp implausible (%.1f)" % lt
 assert -40.0 < rt < 150.0, "remote temp implausible (%.1f)" % rt
 
 # --- manual duty sweep ---------------------------------------------------------
-dev.manual_enable(True)
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.manual = True
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 for pct in (0.0, 25.0, 50.0, 75.0, 100.0):
     dev.set_duty_pct(pct)
     assert dev.wait_for_duty(pct, timeout_ms=1500), \
         "duty did not reach %.0f%%" % pct
-    print("duty %3.0f%% ok (actual %d)" % (pct, dev.get_actual_duty_raw()))
+    print("duty %3.0f%% ok (actual %d)" % (pct, dev.actual_duty_raw))
 
 # --- RPM -----------------------------------------------------------------------
 rpm = _wait_rpm_settled(dev)          # converge before measuring (spin-up)

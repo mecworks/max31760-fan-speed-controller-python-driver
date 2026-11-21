@@ -44,24 +44,24 @@ while not (sr_guard & MAX31760.SR_TACH2A) and guard < 40:
     sr_guard = dev.status_raw()
     guard += 1
 assert sr_guard & MAX31760.SR_TACH2A, "TACH2A never latched"
-pwmv_0 = dev.get_actual_duty_raw()
+pwmv_0 = dev.actual_duty_raw
 print("PWMV with FFDC=FF: %d" % pwmv_0)
 assert pwmv_0 == 255, "expected full speed under fan-fail force"
 dev.set_ffdc_pct(50.0)
 deadline = 0
-while dev.get_actual_duty_raw() != 128 and deadline < 40:
+while dev.actual_duty_raw != 128 and deadline < 40:
     time.sleep_ms(50)
     deadline += 1
-pwmv_mid = dev.get_actual_duty_raw()
+pwmv_mid = dev.actual_duty_raw
 print("PWMV with FFDC=50%%: %d" % pwmv_mid)
 assert pwmv_mid == 128, "output did not follow FFDC (force path dead?)"
-dev.set_ffdc_raw(0xFF)
+dev.ff_dc_raw = 0xFF
 deadline = 0
-while dev.get_actual_duty_raw() != 255 and deadline < 40:
+while dev.actual_duty_raw != 255 and deadline < 40:
     time.sleep_ms(50)
     deadline += 1
-assert dev.get_actual_duty_raw() == 255, "FFDC restore lost"
-assert dev.get_ffdc_raw() == 0xFF
+assert dev.actual_duty_raw == 255, "FFDC restore lost"
+assert dev.ff_dc_raw == 0xFF
 print("ffdc force path: OK (output followed FFDC 255->128->255)")
 
 # --- clear_fan_fail + re-arm latency -------------------------------------------
@@ -80,37 +80,37 @@ assert el >= 5000, "re-arm suspiciously fast (%d ms)" % el
 print("clear_fan_fail + re-arm: OK")
 
 # --- FF_0 / FF mode / RD mode / polarity round-trips ----------------------------
-assert not dev.ff_zero_detection()
-dev.set_ff_zero_detection(True)
-assert dev.ff_zero_detection()
-dev.set_ff_zero_detection(False)
-assert not dev.ff_zero_detection()
+assert not dev.ff_zero_detection
+dev.ff_zero_detection = True
+assert dev.ff_zero_detection
+dev.ff_zero_detection = False
+assert not dev.ff_zero_detection
 print("ff_zero: OK")
 
-assert dev.get_ff_mode() == MAX31760.FF_MODE_COMPARATOR   # factory
-dev.set_ff_mode(MAX31760.FF_MODE_INTERRUPT)
-assert dev.get_ff_mode() == MAX31760.FF_MODE_INTERRUPT
-dev.set_ff_mode(MAX31760.FF_MODE_COMPARATOR)
-assert dev.get_ff_mode() == MAX31760.FF_MODE_COMPARATOR
+assert dev.ff_mode == MAX31760.FF_MODE_COMPARATOR   # factory
+dev.ff_mode = MAX31760.FF_MODE_INTERRUPT
+assert dev.ff_mode == MAX31760.FF_MODE_INTERRUPT
+dev.ff_mode = MAX31760.FF_MODE_COMPARATOR
+assert dev.ff_mode == MAX31760.FF_MODE_COMPARATOR
 print("ff_mode: OK")
 
-assert not dev.rd_mode_enabled()
-assert not dev.get_rd_polarity()
-dev.set_rd_mode(True)
-dev.set_rd_polarity(True)
-assert dev.rd_mode_enabled() and dev.get_rd_polarity()
-dev.set_rd_mode(False)
-dev.set_rd_polarity(False)
-assert not dev.rd_mode_enabled() and not dev.get_rd_polarity()
+assert not dev.rd_mode
+assert not dev.rd_polarity
+dev.rd_mode = True
+dev.rd_polarity = True
+assert dev.rd_mode and dev.rd_polarity
+dev.rd_mode = False
+dev.rd_polarity = False
+assert not dev.rd_mode and not dev.rd_polarity
 print("rd_mode+polarity: OK")
 
 # --- alert mask ------------------------------------------------------------------
-mask_0 = dev.get_alert_mask()
+mask_0 = dev.alert_mask
 assert mask_0 == 0x00, "factory mask unexpected: 0x%02X" % mask_0
-dev.set_alert_mask(MAX31760.SR_TACH1A | MAX31760.SR_TACH2A)
-assert dev.get_alert_mask() == 0x03
-dev.set_alert_mask(0)
-assert dev.get_alert_mask() == 0x00
+dev.alert_mask = MAX31760.SR_TACH1A | MAX31760.SR_TACH2A
+assert dev.alert_mask == 0x03
+dev.alert_mask = 0
+assert dev.alert_mask == 0x00
 print("alert_mask: OK")
 
 # Restore factory control state + clear any latched faults

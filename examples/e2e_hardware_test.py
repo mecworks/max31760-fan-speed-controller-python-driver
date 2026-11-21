@@ -111,45 +111,43 @@ def s_temperature():
     rt = dev.remote_temp_c
     assert -40.0 < lt < 125.0, "local %.1f implausible" % lt
     assert -40.0 < rt < 150.0, "remote %.1f implausible" % rt
-    for setter, getter, val in ((dev.set_local_high, dev.get_local_high, 55.0),
-                                (dev.set_local_overtemp, dev.get_local_overtemp, 90.0),
-                                (dev.set_remote_high, dev.get_remote_high, 60.0),
-                                (dev.set_remote_overtemp, dev.get_remote_overtemp, 95.0)):
-        setter(val)
-        assert abs(getter() - val) < 0.2, "setpoint round trip failed"
-    dev.set_hysteresis_c(2.0)                  # CR1.HYST: 2 or 4 C only
-    assert abs(dev.get_hysteresis_c() - 2.0) < 0.2
-    dev.set_index_source(MAX31760.INDEX_REMOTE)
-    assert dev.get_index_source() == MAX31760.INDEX_REMOTE
-    dev.set_index_source(MAX31760.INDEX_LOCAL)
-    assert dev.get_index_source() == MAX31760.INDEX_LOCAL
+    for prop, val in (("local_high_c", 55.0), ("local_overtemp_c", 90.0),
+                      ("remote_high_c", 60.0), ("remote_overtemp_c", 95.0)):
+        setattr(dev, prop, val)
+        assert abs(getattr(dev, prop) - val) < 0.2, "setpoint round trip failed"
+    dev.hysteresis_c = 2.0                  # CR1.HYST: 2 or 4 C only
+    assert abs(dev.hysteresis_c - 2.0) < 0.2
+    dev.index_source = MAX31760.INDEX_REMOTE
+    assert dev.index_source == MAX31760.INDEX_REMOTE
+    dev.index_source = MAX31760.INDEX_LOCAL
+    assert dev.index_source == MAX31760.INDEX_LOCAL
 section("temperature/setpoints/index-source", s_temperature)
 
 # ------------------------------------------------------------ manual control --
 def s_manual_control():
-    dev.manual_enable(True)
-    assert dev.manual_enabled()
-    dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
-    assert dev.get_ramp_rate() == MAX31760.RAMP_IMMEDIATE
-    dev.set_duty_raw(200)
-    assert dev.get_duty_cmd_raw() == 200
+    dev.manual = True
+    assert dev.manual
+    dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
+    assert dev.ramp_rate == MAX31760.RAMP_IMMEDIATE
+    dev.duty_cmd_raw = 200
+    assert dev.duty_cmd_raw == 200
     dev.set_duty_pct(50.0)
     assert dev.wait_for_duty(50.0, timeout_ms=1500)
-    assert dev.get_actual_duty_raw() == 128
-    assert abs(dev.get_actual_duty_pct() - 50.0) < 0.5
-    dev.set_pwm_freq_hz(MAX31760.PWM_FREQ_150HZ)
-    assert dev.get_pwm_freq_hz() == MAX31760.PWM_FREQ_150HZ
-    dev.set_pwm_polarity(MAX31760.POLARITY_NEGATIVE)
-    assert dev.get_pwm_polarity() == MAX31760.POLARITY_NEGATIVE
-    dev.set_pwm_polarity(MAX31760.POLARITY_POSITIVE)
-    assert dev.get_pwm_polarity() == MAX31760.POLARITY_POSITIVE
+    assert dev.actual_duty_raw == 128
+    assert abs(dev.actual_duty_pct - 50.0) < 0.5
+    dev.pwm_freq_hz = MAX31760.PWM_FREQ_150HZ
+    assert dev.pwm_freq_hz == MAX31760.PWM_FREQ_150HZ
+    dev.pwm_polarity = MAX31760.POLARITY_NEGATIVE
+    assert dev.pwm_polarity == MAX31760.POLARITY_NEGATIVE
+    dev.pwm_polarity = MAX31760.POLARITY_POSITIVE
+    assert dev.pwm_polarity == MAX31760.POLARITY_POSITIVE
 section("manual-mode/duty/ramp/freq/polarity", s_manual_control)
 
 # ----------------------------------------------------------------------- LUT --
 def s_lut():
     curve = [min(255, int(i * 255 / 47.0)) for i in range(48)]
-    dev.lut_set(curve)
-    got = list(dev.lut_get())
+    dev.lut = curve
+    got = list(dev.lut)
     assert got == curve, "LUT bulk round trip failed"
     dev.lut_set_index(25, 0x5A)
     assert dev.lut_get_index(25) == 0x5A
@@ -164,28 +162,28 @@ section("lut/bulk+index/helpers", s_lut)
 
 # -------------------------------------------------------------------- tach/RPM -
 def s_tach():
-    dev.tach1_enable(True)
-    assert dev.tach1_enabled()
+    dev.tach1_enabled = True
+    assert dev.tach1_enabled
     dev.set_duty_pct(100.0)
     assert dev.wait_for_duty(100.0, timeout_ms=1500)
     rpm = _wait_rpm_settled(dev)      # converge before measuring (spin-up)
     assert rpm > 500.0, "fan not spinning (rpm=%.1f)" % rpm
-    dev.set_tach_threshold(1000)
-    assert dev.get_tach_threshold() == 1000
+    dev.tach_threshold = 1000
+    assert dev.tach_threshold == 1000
     # port 2: EXCLUDED-HW functionally (no fan); contract checks only
-    dev.tach2_enable(False)
-    assert not dev.tach2_enabled()
+    dev.tach2_enabled = False
+    assert not dev.tach2_enabled
     assert dev.rpm(2) >= 0.0                    # no exception, sane value
 section("tach1/rpm/threshold (+port2 EXCLUDED-HW)", s_tach)
 
 # -------------------------------------------------------- 3-wire one-shot ------
 def s_one_shot():
     dev.configure_3wire_supply_modulation(port=1)
-    assert dev.pulse_stretch_enabled()
+    assert dev.pulse_stretch_enabled
     cnt = dev.measure_tach_once(port=1, timeout_ms=3000)
     assert cnt > 0, "one-shot returned no count"
-    dev.pulse_stretch_enable(False)
-    assert not dev.pulse_stretch_enabled()
+    dev.pulse_stretch_enabled = False
+    assert not dev.pulse_stretch_enabled
 section("3-wire one-shot measure_tach_once", s_one_shot)
 
 # --------------------------------------------------------------------- faults --
@@ -196,43 +194,43 @@ def s_faults():
     dev.clear_fan_fail()
     al = dev.active_alarms()                    # F16 compact bitmask
     assert al == 0, "unexpected alarms %02X after CLRFAIL" % al
-    dev.set_ffdc_raw(128)
-    assert dev.get_ffdc_raw() == 128
+    dev.ff_dc_raw = 128
+    assert dev.ff_dc_raw == 128
     dev.set_ffdc_pct(25.0)
-    assert dev.get_ffdc_raw() == 64
-    dev.set_ff_zero_detection(True)
-    assert dev.ff_zero_detection()
-    dev.set_ff_mode(MAX31760.FF_MODE_COMPARATOR)
-    assert dev.get_ff_mode() == MAX31760.FF_MODE_COMPARATOR
-    dev.set_rd_mode(True)
-    assert dev.rd_mode_enabled()
-    dev.set_rd_mode(False)
-    assert not dev.rd_mode_enabled()
-    dev.set_rd_polarity(False)
-    assert dev.get_rd_polarity() is False
+    assert dev.ff_dc_raw == 64
+    dev.ff_zero_detection = True
+    assert dev.ff_zero_detection
+    dev.ff_mode = MAX31760.FF_MODE_COMPARATOR
+    assert dev.ff_mode == MAX31760.FF_MODE_COMPARATOR
+    dev.rd_mode = True
+    assert dev.rd_mode
+    dev.rd_mode = False
+    assert not dev.rd_mode
+    dev.rd_polarity = False
+    assert dev.rd_polarity is False
     mask = MAX31760.SR_ALARM_MASK & ~MAX31760.SR_RDFA
-    dev.set_alert_mask(mask)
-    assert dev.get_alert_mask() == mask
+    dev.alert_mask = mask
+    assert dev.alert_mask == mask
 section("fault-domain round trips", s_faults)
 
 # ---------------------------------------------------------- alerts/ideality ----
 def s_alerts():
-    dev.set_alert_mode(MAX31760.ALERT_MODE_FAULT_INDICATOR)
-    assert dev.get_alert_mode() == MAX31760.ALERT_MODE_FAULT_INDICATOR
-    dev.set_alert_mode(MAX31760.ALERT_MODE_INTERRUPT)
-    assert dev.get_alert_mode() == MAX31760.ALERT_MODE_INTERRUPT
+    dev.alert_mode = MAX31760.ALERT_MODE_FAULT_INDICATOR
+    assert dev.alert_mode == MAX31760.ALERT_MODE_FAULT_INDICATOR
+    dev.alert_mode = MAX31760.ALERT_MODE_INTERRUPT
+    assert dev.alert_mode == MAX31760.ALERT_MODE_INTERRUPT
     sr = dev.service_alert()
     assert isinstance(sr, int)
     dev.clear_alert_mask()
     assert not dev.alert_masked()
-    dev.set_ideality_factor_index(0x00)
-    assert dev.get_ideality_factor_index() == 0x00
-    n = dev.get_ideality_factor()
+    dev.ideality_factor_index = 0x00
+    assert dev.ideality_factor_index == 0x00
+    n = dev.ideality_factor
     assert abs(n - MAX31760.IDEALITY_TABLE[0]) < 1e-6
     idx = dev.set_ideality_factor(1.0)
     best = min(range(64), key=lambda i: abs(MAX31760.IDEALITY_TABLE[i] - 1.0))
     assert idx == best, "nearest-match index wrong"
-    assert abs(dev.get_ideality_factor() - 1.0) < 0.005
+    assert abs(dev.ideality_factor - 1.0) < 0.005
 section("alert-mode/service/ideality", s_alerts)
 
 # ------------------------------------------------------------------- lifecycle -
@@ -246,25 +244,25 @@ def s_lifecycle():
     assert not dev.eeprom_corrupt()
     dev.soft_por()
     assert dev.read_reg(0x00, 1)[0] == sentinel, "POR survival failed"
-    dev.enter_standby()
-    assert dev.standby_active()
+    dev.standby = True
+    assert dev.standby
     assert dev.probe()                          # I2C alive in standby
-    dev.exit_standby()
-    assert not dev.standby_active()
+    dev.standby = False
+    assert not dev.standby
     dev.recover_from_corruption(timeout_ms=2000)   # clean no-op path
     assert not dev.eeprom_corrupt()
 section("eeprom/por/standby/recovery", s_lifecycle)
 
 # -------------------------------------------------------------------- assists --
 def s_assists():
-    dev.spin_up_enable(True)
-    assert dev.spin_up_enabled()
-    dev.spin_up_enable(False)
-    assert not dev.spin_up_enabled()
-    dev.tacho_full_enable(True)
-    assert dev.tacho_full_enabled()
-    dev.tacho_full_enable(False)
-    assert not dev.tacho_full_enabled()
+    dev.spin_up_enabled = True
+    assert dev.spin_up_enabled
+    dev.spin_up_enabled = False
+    assert not dev.spin_up_enabled
+    dev.tacho_full_enabled = True
+    assert dev.tacho_full_enabled
+    dev.tacho_full_enabled = False
+    assert not dev.tacho_full_enabled
 section("spin-up/tacho-full bits", s_assists)
 
 # -------------------------------------------------------------------- presets --
@@ -292,8 +290,8 @@ def s_errors():
     expect_value_error(lambda: dev.read_reg(0x00, 0x100))        # too long
     expect_value_error(lambda: dev.set_duty_pct(-1.0))
     expect_value_error(lambda: dev.set_duty_pct(101.0))
-    expect_value_error(lambda: dev.set_tach_threshold(70000))
-    expect_value_error(lambda: dev.set_ramp_rate(0x40))
+    expect_value_error(lambda: setattr(dev, "tach_threshold", 70000))
+    expect_value_error(lambda: setattr(dev, "ramp_rate", 0x40))
     expect_value_error(lambda: dev.lut_set_index(48, 100))
     expect_value_error(lambda: dev.set_ideality_factor(1.5))
     expect_value_error(lambda: dev.configure_4wire_fan(port=3))

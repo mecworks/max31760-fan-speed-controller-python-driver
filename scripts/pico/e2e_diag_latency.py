@@ -16,7 +16,7 @@ print("SR start=%02X" % dev.read_reg(REG_SR, 1)[0])   # clears any latch
 # Restart TACH2 monitoring with a clean slate
 dev.write_reg(0x02, bytes([(cr3_0 & ~0x02) | 0x80]))   # TACH2 off + CLRFAIL
 t0 = time.ticks_ms()
-dev.tach2_enable(True)
+dev.tach2_enabled = True
 print("TACH2 re-enabled at t=0")
 
 seen = False

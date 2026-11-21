@@ -28,17 +28,17 @@ dev.write_reg(0x02, bytes([cr3_prep]))
 dev.write_reg(0x02, bytes([cr3_prep | 0x80]))   # CLRFAIL
 
 # Ramp-rate API round-trip (prep above left ramp at immediate)
-assert dev.get_ramp_rate() == MAX31760.RAMP_IMMEDIATE
+assert dev.ramp_rate == MAX31760.RAMP_IMMEDIATE
 for r in (MAX31760.RAMP_MED_SLOW, MAX31760.RAMP_MED_FAST,
           MAX31760.RAMP_IMMEDIATE, MAX31760.RAMP_SLOW):
-    dev.set_ramp_rate(r)
-    assert dev.get_ramp_rate() == r, "ramp rate lost"
+    dev.ramp_rate = r
+    assert dev.ramp_rate == r, "ramp rate lost"
 print("ramp_rate round-trips: OK")
 
-dev.manual_enable(True)
+dev.manual = True
 
 # --- IMMEDIATE ramp: settle must be fast -------------------------------------
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 dev.set_duty_pct(25.0)
 t0 = time.ticks_ms()
 ok = dev.wait_for_duty(25.0, timeout_ms=2000)
@@ -47,16 +47,16 @@ assert ok and dt_imm < 500, "immediate ramp too slow (%d ms)" % dt_imm
 print("immediate: settled at 25%% in %d ms" % dt_imm)
 
 # --- SLOW ramp (3.125 %/s): verify gradual slew ------------------------------
-dev.set_ramp_rate(MAX31760.RAMP_SLOW)
+dev.ramp_rate = MAX31760.RAMP_SLOW
 dev.set_duty_pct(75.0)                       # 25 -> 75 needs 16 s at full rate
 time.sleep_ms(1000)                          # expect ~3.1 percentage points
-mid = dev.get_actual_duty_raw()
+mid = dev.actual_duty_raw
 lo, hi = 64, 192                             # 25% .. 75% raw bounds
 assert lo < mid < hi, "slow ramp not slewing (mid=%d)" % mid
 print("slow ramp: after 1 s actual=%d (between %d and %d)" % (mid, lo, hi))
 
 # Switch back to immediate; wait_for_duty must now finish promptly
-dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)
+dev.ramp_rate = MAX31760.RAMP_IMMEDIATE
 t1 = time.ticks_ms()
 ok = dev.wait_for_duty(75.0, timeout_ms=2000)
 dt_fin = time.ticks_diff(time.ticks_ms(), t1)
@@ -64,7 +64,7 @@ assert ok and dt_fin < 500, "finish too slow (%d ms)" % dt_fin
 print("switched to immediate: finished at 75%% in %d ms" % dt_fin)
 
 # Restore factory control state
-dev.manual_enable(False)
+dev.manual = False
 dev.write_reg(0x02, bytes([cr3_0]))
 assert dev.read_reg(0x02, 1)[0] == cr3_0
 print("restored factory CR3")
