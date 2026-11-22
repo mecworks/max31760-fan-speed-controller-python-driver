@@ -86,6 +86,10 @@ Migration pattern: `dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)` becomes
   warnings leading `status_raw()`/`active_alarms()`, constructor docstrings,
   F#/D# legend pointers; bench evidence carved out to
   `NOTES/06-eeprom-timing.md`.
+- Repo tooling: `tools/api_audit.py` (three-stage AST audit of
+  examples/scripts for pre-0.1.1 API usage) and `tools/deploy_mp.py`
+  (hash-verified chunked-base64 MicroPython deployment; mpremote 1.29.0
+  file transfer is broken on the bench setup).
 
 ### Changed
 
@@ -96,15 +100,39 @@ Migration pattern: `dev.set_ramp_rate(MAX31760.RAMP_IMMEDIATE)` becomes
   binary-search helper (MicroPython's stdlib has no `bisect` module).
 - Lint gate amended: f-strings accepted; type annotations restricted to the
   five-name built-in whitelist.
-- Test suite grown 134 → 151 tests (facade-export, context-manager, repr,
-  smbus-compat-contract, and regs-module coverage).
+- Test suite grown 134 → 153 tests (facade-export, context-manager, repr,
+  smbus-compat-contract, regs-module, and bisect-equivalence coverage).
 
 ### Validated on
 
-- Host gates: 151 unit tests OK, API-coverage PASS (97 public members),
+- Host gates: 153 unit tests OK, API-coverage PASS (97 public members),
   MicroPython-subset lint PASS ×8, compileall clean.
-- Hardware E2E (Pico W, ESP32-S3, RPi 3A+): pending Phase H1/H2 runs;
-  merge/tag gated on all three passing.
+- Hardware E2E — sequential single-chip runs, `hw_smoke_test.py` PASS +
+  `e2e_hardware_test.py` 12/12 PASS on each, configuration restored
+  byte-for-byte:
+  - RPi Pico W (RP2040, MicroPython v1.29.0, COM16) — Phase H1.
+  - ESP32-S3 (MicroPython v1.29.0, COM7) — Phase H2 leg 1.
+  - Raspberry Pi 3A+ (Debian 13, Python 3.13.5, smbus2, I²C bus 1) —
+    Phase H2 leg 2.
+- Merged to `main` and tagged `v0.1.1` on 2026-11-21 after all three
+  platforms passed (the D-10 merge boundary).
+
+### Hardware observations (chip/fan behaviour, recorded for users)
+
+- **0 % duty does not stop a 4-wire fan.** Per the Intel 4-wire convention
+  the bench fan (Cooler Master SickleFlow 92) runs at its minimum speed
+  (~656 rpm) at 0 % PWM; its effective proportional control range is
+  ~22–100 % duty (hard min-speed floor below ~22 %). Characterization data:
+  `NOTES/bench-data/duty_curve_1pct.csv` / `fan_curve_1pct.png`.
+- **`rpm()` reports a stale value after the fan stops.** The MAX31760
+  tachometer latches pulse periods, not counts; with no incoming pulses the
+  latched period — and thus the computed RPM — freezes at its last valid
+  value. A staleness guard is a candidate future improvement (tracked in
+  TODO.md, R7).
+- **Temperature ADC is gated off in standby.** `local_temp_c` /
+  `remote_temp_c` read 0.0 while `standby` is True (I²C stays alive;
+  register reads and `verify()` still work). Sample temperatures before
+  entering standby and after exiting it.
 
 ## [0.1.0] - 2026-11-08
 
